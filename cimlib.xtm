@@ -1,0 +1,232 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; CIM - Controlling Interactive Music 
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; load rtmidi
+(sys:load "libs/external/rtmidi.xtm")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; MIDI MESSAGE BUFFER
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; absolute_time adjusted_time idx type chan a b
+(bind-type MidiMSG <i64,i64,i64,i8,i32,i32,i32>)
+
+(bind-val MidiMSGBuffer |1000000,MidiMSG|)
+(bind-val MidiMSGBufferIdx i64 0)
+(bind-val MidiMSGBufferStartTime i64 0)
+
+(bind-func last_midi_msg
+  (lambda ()
+    (if (= 0 MidiMSGBufferIdx) null
+        (aref-ptr MidiMSGBuffer (- MidiMSGBufferIdx 1)))))
+
+(bind-func midi_msg_buffer_reset
+  (lambda ()
+    (set! MidiMSGBufferIdx 0)))
+
+(bind-func midi_msg_timestamp
+  (lambda (msg:MidiMSG*)
+    (if (null? msg) -1
+        (tref msg 1))))
+
+(bind-func midi_msg_time
+  (lambda (msg:MidiMSG*)
+    (if (null? msg) -1
+        (tref msg 1))))
+
+(bind-func midi_msg_sampletime
+  (lambda (msg:MidiMSG*)
+    (if (null? msg) -1
+        (tref msg 0))))
+
+(bind-func midi_msg_sample
+  (lambda (msg:MidiMSG*)
+    (if (null? msg) -1
+        (tref msg 0))))
+
+(bind-func midi_msg_idx
+  (lambda (msg:MidiMSG*)
+    (tref msg 2)))
+
+(bind-func midi_msg_type
+  (lambda (msg:MidiMSG*)
+    (tref msg 3)))
+
+(bind-func midi_msg_channel
+  (lambda (msg:MidiMSG*)
+    (tref msg 4)))
+
+(bind-func midi_msg_pitch
+  (lambda (msg:MidiMSG*)
+    (tref msg 5)))
+
+(bind-func midi_msg_a
+  (lambda (msg:MidiMSG*)
+    (tref msg 5)))
+
+(bind-func midi_msg_volume
+  (lambda (msg:MidiMSG*)
+    (tref msg 6)))
+
+(bind-func midi_msg_b
+  (lambda (msg:MidiMSG*)
+    (tref msg 6)))
+
+(bind-func MidiMSG_print:[void,MidiMSG*]*
+  (lambda (x)
+    (if (null? x)
+        (printf "<MIDI: NULL>")
+        (printf "<MIDI: idx(%d),time(%lld),type(%d),a(%d),b(%d)>" (midi_msg_idx x) (midi_msg_time x) (midi_msg_type x) (midi_msg_a x) (midi_msg_b x)))
+    void))
+
+(bind-poly print MidiMSG_print)
+
+(bind-func record_midi_msg
+  (lambda (time type chan a b)
+    (if (= MidiMSGBufferIdx 0) (set! MidiMSGBufferStartTime time))
+    (let ((msg:MidiMSG* (aref-ptr MidiMSGBuffer MidiMSGBufferIdx)))
+      (tfill! msg time (- time MidiMSGBufferStartTime) MidiMSGBufferIdx type chan a b)
+      ;; (aset! MidiMSGBuffer MidiMSGBufferIdx msg)
+      (set! MidiMSGBufferIdx (+ MidiMSGBufferIdx 1))
+      (- MidiMSGBufferIdx 1))))
+
+(bind-func retrieve_midi_msg_a
+  (lambda (idx)
+    (if (>= idx MidiMSGBufferIdx)
+        null
+        (aref-ptr MidiMSGBuffer idx))))
+
+(bind-poly retrieve_midi_msg retrieve_midi_msg_a)
+
+(bind-func dump_midi_buffer
+  (lambda ()
+    (let ((idx 0)
+          (msg (retrieve_midi_msg idx)))
+      (while (and (not (null? msg))
+                  (< idx MidiMSGBufferIdx))
+        (println msg)
+        (set! idx (+ 1 idx))
+        (set! msg (retrieve_midi_msg idx))))))
+
+(bind-func midi_buffer_size
+  (lambda ()
+    MidiMSGBufferIdx))
+
+(bind-func find_midi_msg_a
+  (lambda (timea timeb)
+    (let ((idx 0)
+          (msg (retrieve_midi_msg idx)))
+      (while (and (not (null? msg))
+                  (or (< (midi_msg_timestamp msg) timea)
+                      (> (midi_msg_timestamp msg) timeb)))
+        (set! idx (+ idx 1))
+        (set! msg (retrieve_midi_msg idx)))
+      msg)))
+
+(bind-poly find_midi_msg find_midi_msg_a)
+
+(bind-func find_midi_msg_off
+  (lambda (msgin:MidiMSG*)
+    (let ((idx (+ (midi_msg_idx msgin) 1))
+          (pitchin (midi_msg_pitch msgin))
+          (msg (retrieve_midi_msg idx)))
+      (while (or (not (null? msg))
+                 (= MIDI_CC (midi_msg_type msg))
+                 (<> (midi_msg_pitch msg) pitchin))
+        (set! idx (+ idx 1))
+        (set! msg (retrieve_midi_msg idx)))
+      (if (null? msg) msg
+          (if (= (midi_msg_type msg) MIDI_NOTE_OFF) msg
+              (if (= (midi_msg_volume msg) 0)
+                  msg
+                  null))))))
+
+(bind-func find_midi_msg_dur
+  (lambda (msgin:MidiMSG*)
+    (let ((idx (+ (midi_msg_idx msgin) 1))
+          (pitchin (midi_msg_pitch msgin))
+          (msg (retrieve_midi_msg idx)))
+      (while (or (not (null? msg))
+                 (= MIDI_CC (midi_msg_type msg))
+                 (<> (midi_msg_pitch msg) pitchin))
+        (set! idx (+ idx 1))
+        (set! msg (retrieve_midi_msg idx)))
+      (if (null? msg) 0
+          (- (midi_msg_time msg) (midi_msg_time msgin))))))
+
+
+(bind-func midi_send_dat
+  (lambda (device:i8* a:i8 b:i8 c:i8 d:i8)
+    (midi_send (cast device) a b c d)))
+
+;; where timea and timeb are limits for startime not endtime
+(bind-func midi_playback_a
+  (lambda (time device:i8* timea timeb)
+    (let ((startmsg (find_midi_msg timea (+ timea 5000)))
+          (endmsg (find_midi_msg timeb (+ timeb 5000))))
+      (println startmsg "--" endmsg)
+      (if (or (null? startmsg)
+              (null? endmsg))
+          void
+          (let ((startidx (midi_msg_idx startmsg))
+                (starttime (* -1 (midi_msg_time startmsg)))
+                (endidx (midi_msg_idx endmsg))
+                (num (- endidx startidx))
+                (msg null)
+                (pitch 0)
+                (duration 0)
+                (i 0))
+            (dotimes (i num)              
+              (set! msg (retrieve_midi_msg (+ i startidx)))
+              (callback (+ (midi_msg_time msg) time starttime) midi_send_dat
+                        device
+                        (midi_msg_type msg)
+                        (i32toi8 (midi_msg_channel msg))
+                        (i32toi8 (midi_msg_a msg))
+                        (i32toi8(midi_msg_b msg))))
+            void)))))
+
+(bind-func midi_playback_b
+  (lambda (time device timea)
+    (midi_playback_a time device timea (midi_msg_time (last_midi_msg)))))
+
+(bind-func midi_playback_c
+  (lambda (time device)
+    (midi_playback_a time device
+                     (midi_msg_time (retrieve_midi_msg 0))
+                     (midi_msg_time (last_midi_msg)))))
+
+(bind-poly midi_playback midi_playback_a)
+(bind-poly midi_playback midi_playback_b)
+(bind-poly midi_playback midi_playback_c)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; write a midi receiver which writes to MSG Buffer
+;;
+(bind-func midi_msg_buffer_receiver
+  (let ((type:i8 0) (chan:i8 0) (a:i8 0) (b:i8 0))
+    (lambda (time:double len:i64 msg:i8*)
+      (set! type (>> (pref msg 0) 4))
+      (set! chan (& (pref msg 0) 15))
+      (set! a (pref msg 1))
+      (set! b (pref msg 2))
+      (if (or (= type MIDI_NOTE_ON) (= type MIDI_NOTE_OFF) (= type MIDI_CC))
+          (begin
+            ;; (println "midi-in" type chan a b)
+            (record_midi_msg (now) type (convert chan) (convert a) (convert b))
+            void)
+          void))))
+
+
+;; utilities
+(define panic
+  (lambda ()
+  	(dotimes (c 16)
+  		(dotimes (i 127)
+    		(midi_send *midi-out* 8 c i 0)))))
