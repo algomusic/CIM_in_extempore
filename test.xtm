@@ -29,14 +29,20 @@
 ;; print out current note buffer
 (dump_note_buffer)
 ;; dump all note chunks with gap greater than 5.0 seconds
-(dump_chunks_a 5.0)
+(dump_chunks_a 1.0)
 
 ;; note playback
 (note_midi_playback_d (now) *midi-out* 0) ;; play all notes
-;; play note chunks 1,2 and 3 separated by 5 seconds
-(note_midi_playback_b (now) *midi-out* 0 1 5.0)
+;; play note chunks 1,2 and 3 separated by 2 seconds
+(note_midi_playback_b (now) *midi-out* 0 1 1.0)
 (note_midi_playback_b (now) *midi-out* 0 2 5.0)
-(note_midi_playback_b (now) *midi-out* 0 3 5.0)
+(note_midi_playback_b (now) *midi-out* 0 3 2.0)
+(note_midi_playback_b (now) *midi-out* 0 4 2.0)
+(note_midi_playback_b (now) *midi-out* 0 5 2.0)
+
+;; save/load note buffers to/from disk
+(cim_save_note_buffer "/tmp/test.cim")
+(cim_load_note_buffer "/tmp/test.cim")
 
 ;; reset stuff
 (define reset-all

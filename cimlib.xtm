@@ -8,6 +8,7 @@
 (sys:load "libs/external/rtmidi.xtm")
 (sys:load "libs/core/math.xtm")
 (sys:load "libs/core/audio_dsp.xtm")
+(sys:load "libs/core/instruments.xtm")
 
 (bind-val SRd double (integer->real *au:samplerate*))
 
@@ -26,6 +27,58 @@
 (bind-val CIMNoteBufferIdx i64 0)
 (bind-val CIMNoteDurResolver |127,i64|)
 (bind-val CIMNoteBufferStartTime i64 0)
+
+(bind-func cim_save_note_buffer
+  (lambda (filename)
+    (let ((fp (fopen filename "w"))
+          (idx:i64* (salloc 1)))
+      (pset! idx 0 CIMNoteBufferIdx)
+      (if (null? fp)
+          (begin (println "Failed to open file" (Str filename))
+                 -1)
+          (let ((data (cast CIMNoteBuffer i8*))
+                (pos1 (ptrtoi64 (cast (aref-ptr CIMNoteBuffer 0))))
+                (pos2 (ptrtoi64 (cast (aref-ptr CIMNoteBuffer 1))))
+                (size (- pos2 pos1)))
+            (if (< (fwrite (cast idx i8*) 8 1 fp) 0)
+                (begin
+                  (fclose fp)
+                  (println "Failed to write to " (Str filename))
+                  -1)
+                (if (< (fwrite data size CIMNoteBufferIdx fp) 0)
+                    (begin
+                      (fclose fp)
+                      (println "Failed to write to " (Str filename))
+                      -1)
+                    (begin
+                      (fclose fp)
+                      1))))))))
+
+(bind-func cim_load_note_buffer
+  (lambda (filename)
+    (let ((fp (fopen filename "r"))
+          (idx:i64* (salloc 1)))
+      (if (null? fp)
+          (begin (println "Failed to open file" (Str filename))
+                 -1)
+          (let ((data (cast CIMNoteBuffer i8*))
+                (pos1 (ptrtoi64 (cast (aref-ptr CIMNoteBuffer 0))))
+                (pos2 (ptrtoi64 (cast (aref-ptr CIMNoteBuffer 1))))
+                (size (- pos2 pos1)))
+            (if (= (fread (cast idx) 8 1 fp) 8)
+                (begin
+                  (fclose fp)
+                  (println "Failed to load from " (Str filename))
+                  -1)
+                (if (= (fread data size (pref idx 0) fp) (* size (pref idx 0)))
+                    (begin
+                      (fclose fp)
+                      (println "Failed to load from " (Str filename))
+                      -1)
+                    (begin
+                      (set! CIMNoteBufferIdx (pref idx 0))
+                      (fclose fp)
+                      1))))))))
 
 (bind-func init_dur_resolver
   (lambda ()
@@ -183,7 +236,7 @@
                            (set! startnote note)
                            void)))
               (begin (set! idx (+ idx 1)) void))
-          (set! ptime (cim_note_onset note))
+          (set! ptime (+ (cim_note_onset note) (cim_note_duration note)))
           (set! note (retrieve_note idx)))
         (if (and (null? note)
                  (= chunk_num 1))
@@ -296,7 +349,7 @@
 
 (bind-func note_midi_playback_c
   (lambda (time device:i8* channel chunknum)
-    (let ((chunk (find_chunk chunknum 5.0)))
+    (let ((chunk (find_chunk chunknum 2.0)))
       (note_midi_playback_a time device channel
                             (cim_chunk_start chunk)
                             (cim_chunk_end chunk)))))
@@ -311,6 +364,40 @@
 (bind-poly note_midi_playback note_midi_playback_b)
 (bind-poly note_midi_playback note_midi_playback_c)
 (bind-poly note_midi_playback note_midi_playback_d)
+
+;; where timea and timeb are limits for startime not endtime
+;; where variance is a distance 'around' timea and timeb
+(bind-func note_playback_a
+  (lambda (time instrument startnote:CIMNote* endnote:CIMNote*)
+    (println "playback -------")
+    (println "from:" startnote)
+    (println "to  :" endnote)
+    (println)
+    (if (or (null? startnote)
+            (null? endnote))
+        void
+        (let ((startidx (cim_note_index startnote))
+              (starttime (dtoi64 (* -1.0 SRd (cim_note_onset startnote))))
+              (endidx (cim_note_index endnote))
+              (num (+ 1 (- endidx startidx)))
+              (note null)
+              (pitch 0)
+              (duration 0)
+              (i 0))
+          (dotimes (i num)              
+            (set! note (retrieve_note (+ i startidx)))
+            (xtm_play_note (+ time
+                              (dtoi64 (* SRd (cim_note_onset note)))
+                              starttime)
+                           instrument                             
+                           (midi2frq (i64tof (cim_note_pitch note)))
+                           (/ (exp (/ (i64tof (cim_note_volume note)) 26.222)) 127.0)
+                           (dtoi64 (* SRd (cim_note_duration note)))
+                           0 null))
+          void))))
+
+(bind-poly note_playback note_playback_a)
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
