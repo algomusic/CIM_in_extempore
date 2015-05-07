@@ -300,6 +300,7 @@
   (lambda (device:i8* a:i8 b:i8 c:i8 d:i8)
     (midi_send (cast device) a b c d)))
 
+
 ;; where timea and timeb are limits for startime not endtime
 ;; where variance is a distance 'around' timea and timeb
 (bind-func note_midi_playback_a
@@ -406,8 +407,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-;; absolute_time adjusted_time idx type chan a b
-(bind-type MidiMSG <i64,i64,i64,i8,i32,i32,i32>)
+;; absolute_time seconds idx type chan a b
+(bind-type MidiMSG <i64,double,i64,i8,i32,i32,i32>)
 (bind-val MidiMSGBuffer |1000000,MidiMSG|)
 (bind-val MidiMSGBufferIdx i64 0)
 (bind-val MidiMSGBufferStartTime i64 0)
@@ -421,14 +422,9 @@
   (lambda ()
     (set! MidiMSGBufferIdx 0)))
 
-(bind-func midi_msg_timestamp
+(bind-func midi_msg_onset
   (lambda (msg:MidiMSG*)
-    (if (null? msg) -1
-        (tref msg 1))))
-
-(bind-func midi_msg_time
-  (lambda (msg:MidiMSG*)
-    (if (null? msg) -1
+    (if (null? msg) -1.0
         (tref msg 1))))
 
 (bind-func midi_msg_sampletime
@@ -473,7 +469,7 @@
   (lambda (x)
     (if (null? x)
         (printf "<MIDI: NULL>")
-        (printf "<MIDI: idx(%d),time(%lld),type(%d),a(%d),b(%d)>" (midi_msg_idx x) (midi_msg_time x) (midi_msg_type x) (midi_msg_a x) (midi_msg_b x)))
+        (printf "<MIDI: idx(%d),time(%f),type(%d),a(%d),b(%d)>" (midi_msg_idx x) (midi_msg_onset x) (midi_msg_type x) (midi_msg_a x) (midi_msg_b x)))
     void))
 
 (bind-poly print MidiMSG_print)
@@ -482,7 +478,7 @@
   (lambda (time type chan a b)
     (if (= MidiMSGBufferIdx 0) (set! MidiMSGBufferStartTime time))
     (let ((msg:MidiMSG* (aref-ptr MidiMSGBuffer MidiMSGBufferIdx)))
-      (tfill! msg time (- time MidiMSGBufferStartTime) MidiMSGBufferIdx type chan a b)
+      (tfill! msg time (/ (i64tod (- time MidiMSGBufferStartTime)) SRd) MidiMSGBufferIdx type chan a b)
       ;; (aset! MidiMSGBuffer MidiMSGBufferIdx msg)
       (set! MidiMSGBufferIdx (+ MidiMSGBufferIdx 1))
       (- MidiMSGBufferIdx 1))))
@@ -514,8 +510,8 @@
     (let ((idx 0)
           (msg (retrieve_midi_msg idx)))
       (while (and (not (null? msg))
-                  (or (< (midi_msg_timestamp msg) timea)
-                      (> (midi_msg_timestamp msg) timeb)))
+                  (or (< (midi_msg_onset msg) timea)
+                      (> (midi_msg_onset msg) timeb)))
         (set! idx (+ idx 1))
         (set! msg (retrieve_midi_msg idx)))
       msg)))
@@ -548,8 +544,8 @@
                  (<> (midi_msg_pitch msg) pitchin))
         (set! idx (+ idx 1))
         (set! msg (retrieve_midi_msg idx)))
-      (if (null? msg) 0
-          (- (midi_msg_time msg) (midi_msg_time msgin))))))
+      (if (null? msg) 0.0
+          (- (midi_msg_onset msg) (midi_msg_onset msgin))))))
 
 
 (bind-func midi_send_dat
@@ -559,15 +555,15 @@
 
 ;; where timea and timeb are limits for startime not endtime
 (bind-func midi_playback_a
-  (lambda (time device:i8* timea timeb)
-    (let ((startmsg (find_midi_msg timea (+ timea 5000)))
-          (endmsg (find_midi_msg timeb (+ timeb 5000))))
+  (lambda (time device:i8* timea timeb control_only:i1)
+    (let ((startmsg (find_midi_msg timea (+ timea 0.1)))
+          (endmsg (find_midi_msg timeb (+ timeb 0.1))))
       (println startmsg "--" endmsg)
       (if (or (null? startmsg)
               (null? endmsg))
           void
           (let ((startidx (midi_msg_idx startmsg))
-                (starttime (* -1 (midi_msg_time startmsg)))
+                (starttime (* -1 (dtoi64 (* SRd(midi_msg_onset startmsg)))))
                 (endidx (midi_msg_idx endmsg))
                 (num (- endidx startidx))
                 (msg null)
@@ -576,27 +572,40 @@
                 (i 0))
             (dotimes (i num)              
               (set! msg (retrieve_midi_msg (+ i startidx)))
-              (callback (+ (midi_msg_time msg) time starttime) midi_send_dat
-                        device
-                        (midi_msg_type msg)
-                        (i32toi8 (midi_msg_channel msg))
-                        (i32toi8 (midi_msg_a msg))
-                        (i32toi8(midi_msg_b msg))))
+              (if (or (not control_only)
+                      (= (midi_msg_type msg) MIDI_CC))
+                  (callback (+ (dtoi64 (* SRd (midi_msg_onset msg))) time starttime) midi_send_dat
+                            device
+                            (midi_msg_type msg)
+                            (i32toi8 (midi_msg_channel msg))
+                            (i32toi8 (midi_msg_a msg))
+                            (i32toi8(midi_msg_b msg)))))
             void)))))
 
 (bind-func midi_playback_b
-  (lambda (time device timea)
-    (midi_playback_a time device timea (midi_msg_time (last_midi_msg)))))
+  (lambda (time device timea control_only)
+    (midi_playback_a time device timea
+                     (midi_msg_onset (last_midi_msg))
+                     control_only)))
 
 (bind-func midi_playback_c
+  (lambda (time device control_only)
+    (midi_playback_a time device
+                     (midi_msg_onset (retrieve_midi_msg 0))
+                     (midi_msg_onset (last_midi_msg))
+                     control_only)))
+
+(bind-func midi_playback_d
   (lambda (time device)
     (midi_playback_a time device
-                     (midi_msg_time (retrieve_midi_msg 0))
-                     (midi_msg_time (last_midi_msg)))))
+                     (midi_msg_onset (retrieve_midi_msg 0))
+                     (midi_msg_onset (last_midi_msg))
+                     #f)))
 
 (bind-poly midi_playback midi_playback_a)
 (bind-poly midi_playback midi_playback_b)
 (bind-poly midi_playback midi_playback_c)
+(bind-poly midi_playback midi_playback_d)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;

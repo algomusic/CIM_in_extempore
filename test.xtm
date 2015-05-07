@@ -24,7 +24,17 @@
 ;; print out current midi buffer
 (dump_midi_buffer)
 ;; midi playback
-(midi_playback_c (now) *midi-out*)
+(midi_playback_d (now) *midi-out*)
+
+(bind-func test
+  (lambda (k:i1)
+    (println k)))
+
+(bind-func tt
+  (lambda ()
+    (test #t)))
+
+(test #f)
 
 ;; print out current note buffer
 (dump_note_buffer)
@@ -35,10 +45,33 @@
 (note_midi_playback_d (now) *midi-out* 0) ;; play all notes
 ;; play note chunks 1,2 and 3 separated by 2 seconds
 (note_midi_playback_b (now) *midi-out* 0 1 1.0)
-(note_midi_playback_b (now) *midi-out* 0 2 5.0)
+(note_midi_playback_b (now) *midi-out* 0 2 1.0)
 (note_midi_playback_b (now) *midi-out* 0 3 2.0)
 (note_midi_playback_b (now) *midi-out* 0 4 2.0)
 (note_midi_playback_b (now) *midi-out* 0 5 2.0)
+
+(bind-func midi-playback-a
+  (lambda (a b c d e:i32)
+    (midi_playback_a a b c d (i32toi1 e))))  
+
+(let* ((time (+ (now) 1000))
+       (num 1)
+       (size 5.0)
+       (chunk (find_chunk_a num size))
+       (start (cim_chunk_start chunk))
+       (end (cim_chunk_end chunk)))
+  (note_midi_playback_b time *midi-out* 0 num size)
+  (midi-playback-a time *midi-out*
+                   (cim_note_onset start)
+                   (+ (cim_note_onset end)
+                      (cim_note_duration end))
+                   1)
+  (callback (+ time 100000
+               (* *samplerate* (+ (cim_note_onset end)
+                                  (cim_note_duration end))))
+            'panic *midi-out*))
+
+  
 
 ;; save/load note buffers to/from disk
 (cim_save_note_buffer "/tmp/test.cim")
