@@ -6,6 +6,311 @@
 
 ;; load rtmidi
 (sys:load "libs/external/rtmidi.xtm")
+(sys:load "libs/core/math.xtm")
+(sys:load "libs/core/audio_dsp.xtm")
+
+(bind-val SRd double (integer->real *au:samplerate*))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; NOTE Buffer
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;; index (0)
+;; seconds-onset (1), seconds-duration (2),
+;; pitch (3), volume (4), beats (5)
+(bind-type CIMNote <i64,double,double,i64,i64,Rational>)
+(bind-val CIMNoteBuffer |1000000,CIMNote|)
+(bind-val CIMNoteBufferIdx i64 0)
+(bind-val CIMNoteDurResolver |127,i64|)
+(bind-val CIMNoteBufferStartTime i64 0)
+
+(bind-func init_dur_resolver
+  (lambda ()
+    (doloop (i 127)
+      (aset! CIMNoteDurResolver i -1))
+    void))
+
+(init_dur_resolver)
+
+(bind-func cim_note_index
+  (lambda (note:CIMNote*)
+    (if (null? note) -1
+        (tref note 0))))
+
+(bind-func cim_note_onset
+  (lambda (note:CIMNote*)
+    (if (null? note) -1.0
+        (tref note 1))))
+
+(bind-func cim_note_duration
+  (lambda (note:CIMNote*)
+    (tref note 2)))
+
+(bind-func cim_note_set_duration
+  (lambda (note:CIMNote* duration)
+    (tset! note 2 duration)))
+
+(bind-func cim_note_pitch
+  (lambda (note:CIMNote*)
+    (tref note 3)))
+
+(bind-func cim_note_volume
+  (lambda (note:CIMNote*)
+    (tref note 4)))
+
+(bind-func cim_note_beats
+  (lambda (note:CIMNote*)
+    (tref note 5)))
+
+
+(bind-func CIMNote_print:[void,CIMNote*]*
+  (lambda (note)
+    (if (null? note)
+        (printout "<NOTE: NULL>")
+        (printout "<NOTE: " (cim_note_index note)
+                  " onset: " (cim_note_onset note)
+                  " dur: " (cim_note_duration note)
+                  " pitch: " (cim_note_pitch note)
+                  " vol: " (cim_note_volume note)
+                  " beats: " (cim_note_beats note)
+                  ">"))
+    void))
+
+(bind-poly print CIMNote_print)
+
+
+(bind-func retrieve_note
+  (lambda (idx)
+    (if (or (< idx 0)
+            (>= idx CIMNoteBufferIdx))
+        null
+        (aref-ptr CIMNoteBuffer idx))))
+
+(bind-func last_note
+  (lambda ()
+    (if (= 0 CIMNoteBufferIdx) null
+        (aref-ptr CIMNoteBuffer (- CIMNoteBufferIdx 1)))))
+
+(bind-func note_buffer_reset
+  (lambda ()
+    (set! CIMNoteBufferIdx 0)))
+
+(bind-func dump_note_buffer
+  (lambda ()
+    (doloop (i CIMNoteBufferIdx)
+      (println (retrieve_note i)))))
+
+
+(bind-func find_note_a
+  (lambda (timea timeb)
+    (let ((idx 0)
+          (note (retrieve_note idx)))
+      (while (and (not (null? note))
+                  (or (< (cim_note_onset note) timea)
+                      (> (cim_note_onset note) timeb)))
+        (set! idx (+ idx 1))
+        (set! note (retrieve_note idx)))
+      note)))
+
+(bind-func find_note_b
+  (lambda (timea)
+    (find_note_a timea timea)))
+
+(bind-func find_note_c
+  (lambda (timea pitch)
+    (let ((idx 0)
+          (note (retrieve_note idx)))
+      (while (and (not (null? note))
+                  (or (< (cim_note_onset note) timea)
+                      (<> (cim_note_pitch note) pitch)))
+        (set! idx (+ idx 1))
+        (set! note (retrieve_note idx)))
+      note)))
+
+(bind-poly find_note find_note_a)
+(bind-poly find_note find_note_b)
+(bind-poly find_note find_note_c)
+
+(bind-type CIMChunk <i1,CIMNote*,CIMNote*>)
+
+(bind-func cim_chunk_valid
+  (lambda (chunk:CIMChunk*)
+    (tref chunk 0)))
+
+(bind-func cim_chunk_start
+  (lambda (chunk:CIMChunk*)
+    (tref chunk 1)))
+
+(bind-func cim_chunk_end
+  (lambda (chunk:CIMChunk*)
+    (tref chunk 2)))
+
+
+(bind-func CIMChunk_print:[void,CIMChunk*]*
+  (lambda (chunk)
+    (if (null? chunk)
+        (printout "<CHUNK: NULL>")
+        (begin
+          (printout "<CHUNK: valid: " (cim_chunk_valid chunk) " onset: " (cim_note_onset (cim_chunk_start chunk)))
+          (printout "\nstart: " (cim_chunk_start chunk))
+          (printout "\nend  : " (cim_chunk_end chunk) ">")))
+    void))
+
+(bind-poly print CIMChunk_print)
+
+(bind-func find_chunk_a
+  (let ((chunk:CIMChunk* (alloc)))
+    (lambda (chunk_num:i64 gapsize)
+      (tset! chunk 0 #f)
+      (let ((idx 0)
+            (gap 0.0)
+            (startnote (retrieve_note idx))
+            (ptime 0.0)
+            (finished #f)
+            (note (retrieve_note idx)))
+        (while (and (not (null? note)) (not finished))
+          (if (> (- (cim_note_onset note) ptime) gapsize)
+              (begin
+                (set! chunk_num (- chunk_num 1))
+                (if (= chunk_num 0)
+                    (begin (set! finished #t)
+                           (set! idx (- idx 1))
+                           void)
+                    (begin (set! idx (+ idx 0))
+                           (set! startnote note)
+                           void)))
+              (begin (set! idx (+ idx 1)) void))
+          (set! ptime (cim_note_onset note))
+          (set! note (retrieve_note idx)))
+        (if (and (null? note)
+                 (= chunk_num 1))
+            (begin
+              (set! finished #t)
+              (set! note (last_note))))
+        (tfill! chunk finished startnote note)
+        chunk))))
+
+(bind-func find_chunk_b
+  (lambda (chunk_num)
+    (find_chunk_a chunk_num 3.0)))
+
+(bind-poly find_chunk find_chunk_a)
+(bind-poly find_chunk find_chunk_b)
+
+(bind-func dump_chunks_a
+  (lambda (gap)
+    (let ((idx 1)
+          (chunk (find_chunk idx gap)))
+      (while (cim_chunk_valid chunk)
+        (println "-----------" idx "------------")
+        (println chunk)
+        (set! idx (+ idx 1))
+        (set! chunk (find_chunk idx gap)))
+      (println)
+      void)))
+
+(bind-func dump_chunks_b
+  (lambda ()
+    (dump_chunks_a 3.0)))
+
+(bind-poly dump_chunks dump_chunks_a)
+(bind-poly dump_chunks dump_chunks_b)
+
+
+(bind-func record_note
+  (lambda (time type chan:i8 a b)
+    (if (= type MIDI_CC) -1
+        (let ((note (retrieve_note (aref CIMNoteDurResolver (i8toi64 a)))))
+          (if (not (null? note))
+              (begin
+                (cim_note_set_duration note
+                                       (- (/ (i64tod (- time CIMNoteBufferStartTime)) (ftod SRf))
+                                          (cim_note_onset note)))
+                (aset! CIMNoteDurResolver (i8toi64 a) -1)))
+          (if (= type MIDI_NOTE_ON)
+              (begin
+                (if (= CIMNoteBufferIdx 0) (set! CIMNoteBufferStartTime time))
+                (let ((note:CIMNote* (aref-ptr CIMNoteBuffer CIMNoteBufferIdx)))
+                  (tfill! note CIMNoteBufferIdx
+                          (/ (i64tod (- time CIMNoteBufferStartTime)) (ftod SRf))
+                          0.0 (i8toi64 a) (i8toi64 b) 1/1)
+                  (aset! CIMNoteDurResolver (i8toi64 a) CIMNoteBufferIdx)
+                  (set! CIMNoteBufferIdx (+ CIMNoteBufferIdx 1))
+                  (- CIMNoteBufferIdx 1)))
+              -1)))))
+
+
+(bind-func midi_send_dat
+  (lambda (device:i8* a:i8 b:i8 c:i8 d:i8)
+    (midi_send (cast device) a b c d)))
+
+;; where timea and timeb are limits for startime not endtime
+;; where variance is a distance 'around' timea and timeb
+(bind-func note_midi_playback_a
+  (lambda (time device:i8* channel startnote:CIMNote* endnote:CIMNote*)
+    (println "playback -------")
+    (println "from:" startnote)
+    (println "to  :" endnote)
+    (println)
+    (if (or (null? startnote)
+            (null? endnote))
+        void
+        (let ((startidx (cim_note_index startnote))
+              (starttime (dtoi64 (* -1.0 SRd (cim_note_onset startnote))))
+              (endidx (cim_note_index endnote))
+              (num (+ 1 (- endidx startidx)))
+              (note null)
+              (pitch 0)
+              (duration 0)
+              (i 0))
+          (dotimes (i num)              
+            (set! note (retrieve_note (+ i startidx)))
+            (begin
+              (callback (+ time
+                           (dtoi64 (* SRd (cim_note_onset note)))
+                           starttime)
+                        midi_send_dat
+                        device
+                        MIDI_NOTE_ON channel
+                        (i64toi8 (cim_note_pitch note))
+                        (i64toi8 (cim_note_volume note)))
+              (callback (+ (dtoi64 (* SRd (cim_note_onset note)))
+                           (dtoi64 (* SRd (cim_note_duration note)))
+                           time starttime)
+                        midi_send_dat
+                        device
+                        MIDI_NOTE_OFF channel
+                        (i64toi8 (cim_note_pitch note))
+                        (i64toi8 0))))
+          void))))
+
+(bind-func note_midi_playback_b
+  (lambda (time device:i8* channel chunknum gap)
+    (let ((chunk (find_chunk chunknum gap)))
+      (note_midi_playback_a time device channel
+                            (cim_chunk_start chunk)
+                            (cim_chunk_end chunk)))))
+
+(bind-func note_midi_playback_c
+  (lambda (time device:i8* channel chunknum)
+    (let ((chunk (find_chunk chunknum 5.0)))
+      (note_midi_playback_a time device channel
+                            (cim_chunk_start chunk)
+                            (cim_chunk_end chunk)))))
+
+(bind-func note_midi_playback_d
+  (lambda (time device:i8* channel)
+    (note_midi_playback_a time device channel
+                          (retrieve_note 0)
+                          (last_note))))
+
+(bind-poly note_midi_playback note_midi_playback_a)
+(bind-poly note_midi_playback note_midi_playback_b)
+(bind-poly note_midi_playback note_midi_playback_c)
+(bind-poly note_midi_playback note_midi_playback_d)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -13,9 +318,9 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+
 ;; absolute_time adjusted_time idx type chan a b
 (bind-type MidiMSG <i64,i64,i64,i8,i32,i32,i32>)
-
 (bind-val MidiMSGBuffer |1000000,MidiMSG|)
 (bind-val MidiMSGBufferIdx i64 0)
 (bind-val MidiMSGBufferStartTime i64 0)
@@ -164,6 +469,7 @@
   (lambda (device:i8* a:i8 b:i8 c:i8 d:i8)
     (midi_send (cast device) a b c d)))
 
+
 ;; where timea and timeb are limits for startime not endtime
 (bind-func midi_playback_a
   (lambda (time device:i8* timea timeb)
@@ -205,9 +511,9 @@
 (bind-poly midi_playback midi_playback_b)
 (bind-poly midi_playback midi_playback_c)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-;; write a midi receiver which writes to MSG Buffer
+;; write a midi receiver which writes to MSG Buffer and Note Buffer
 ;;
 (bind-func midi_msg_buffer_receiver
   (let ((type:i8 0) (chan:i8 0) (a:i8 0) (b:i8 0))
@@ -218,15 +524,15 @@
       (set! b (pref msg 2))
       (if (or (= type MIDI_NOTE_ON) (= type MIDI_NOTE_OFF) (= type MIDI_CC))
           (begin
-            ;; (println "midi-in" type chan a b)
+            ;; (println "midi-in" type chan a b)            
             (record_midi_msg (now) type (convert chan) (convert a) (convert b))
+            (record_note (now) type (convert chan) (convert a) (convert b))
             void)
           void))))
 
-
 ;; utilities
 (define panic
-  (lambda ()
+  (lambda (device)
   	(dotimes (c 16)
   		(dotimes (i 127)
-    		(midi_send *midi-out* 8 c i 0)))))
+    		(midi_send device 8 c i 0)))))
