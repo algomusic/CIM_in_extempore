@@ -607,12 +607,92 @@
 (bind-poly midi_playback midi_playback_c)
 (bind-poly midi_playback midi_playback_d)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; analysis
+
+(bind-val rhythmbins |24,i64|)
+
+(bind-func release_bpm_bins
+  (lambda ()
+    (doloop (i 24)
+      (aset! rhythmbins i 0))))
+
+(bind-func print_rhythm_bins
+  (lambda ()
+    (doloop (i 24)
+      (printout (aref rhythmbins i) ","))
+    (println)))
+
+(bind-func decrement_bins
+  (lambda ()
+    (doloop (i 24)
+      (if (> (aref rhythmbins i) 0)
+          (aset! rhythmbins i (- (aref rhythmbins i) 1))))
+    void))
+    
+(bind-func current_bpm
+  (let ((firstm 0) (secondm 0) (i 0) (idx 0))
+    (lambda ()
+      (set! firstm 0) (set! secondm 0) (set! idx 0)
+      (dotimes (i 24)
+        (if (> (aref rhythmbins i) secondm)
+            (set! secondm (aref rhythmbins i)))
+        (if (> (aref rhythmbins i) firstm)
+            (begin
+              (set! secondm firstm)              
+              (set! firstm (aref rhythmbins i))
+              (set! idx i))))
+      (if (> firstm 7)
+          (begin
+            (dotimes (i 24)
+              (aset! rhythmbins i 0))
+            (aset! rhythmbins idx 3)))
+      (+ 72 (* idx 4)))))
+
+(bind-func rhythm_analysis
+  (let ((previous_onset 0.0)
+        (this_onset 0.0)
+        (modr (i64tod 4))
+        (modv 0.0)
+        (idx 0)
+        (bin 0.0))
+    (lambda (note:CIMNote*)
+      (set! this_onset (cim_note_onset note))
+      (if (and (> (- this_onset previous_onset) .1)
+               (< (- this_onset previous_onset) 2.0))
+          (begin
+            (set! bin (* (/ 1.0 (- this_onset previous_onset)) 60.0))
+            (while (or (< bin 72.0)
+                       (>= bin 144.0))
+              (if (< bin 72.0) (set! bin (* 2.0 bin)))
+              (if (>= bin 144.0) (set! bin (* 0.5 bin))))
+            (set! modv (% bin modr))            
+            (if (< modv (* .5 modr))
+                (set! bin (- bin modv))
+                (set! bin (+ bin (- modr modv))))
+            (set! idx (/ (- (dtoi64 bin) 72) (dtoi64 modr)))
+            (aset! rhythmbins idx (+ 1 (aref rhythmbins idx)))
+            (set! previous_onset this_onset)
+            void)
+          (begin
+            (set! previous_onset this_onset)
+            void)))))
+
+(bind-func note_analysis
+  (lambda (note:CIMNote*)
+    (if (null? note) void
+        (begin
+          ;;(println ">>" note)          
+          (rhythm_analysis note)
+          void))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; write a midi receiver which writes to MSG Buffer and Note Buffer
 ;;
 (bind-func midi_msg_buffer_receiver
-  (let ((type:i8 0) (chan:i8 0) (a:i8 0) (b:i8 0))
+  (let ((type:i8 0) (chan:i8 0) (a:i8 0) (b:i8 0) (idx -1))
     (lambda (time:double len:i64 msg:i8*)
       (set! type (>> (pref msg 0) 4))
       (set! chan (& (pref msg 0) 15))
@@ -620,9 +700,10 @@
       (set! b (pref msg 2))
       (if (or (= type MIDI_NOTE_ON) (= type MIDI_NOTE_OFF) (= type MIDI_CC))
           (begin
-            ;; (println "midi-in" type chan a b)            
+;            (println "midi-in" type chan a b)            
             (record_midi_msg (now) type (convert chan) (convert a) (convert b))
-            (record_note (now) type (convert chan) (convert a) (convert b))
+            (set! idx (record_note (now) type (convert chan) (convert a) (convert b)))
+            (note_analysis (retrieve_note idx))
             void)
           void))))
 
