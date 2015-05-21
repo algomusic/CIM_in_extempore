@@ -1,6 +1,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-;; CIM - Controlling Interactive Music 
+;; CIM - Controlling Interactive Music
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -10,14 +10,13 @@
 (sys:load "libs/core/audio_dsp.xtm")
 (sys:load "libs/core/instruments.xtm")
 
-(bind-val SRd double (integer->real *au:samplerate*))
+;; (bind-val SRd double (integer->real *au:samplerate*))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; NOTE Buffer
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 
 ;; index (0)
 ;; seconds-onset (1), seconds-duration (2),
@@ -118,7 +117,6 @@
   (lambda (note:CIMNote*)
     (tref note 5)))
 
-
 (bind-func CIMNote_print:[void,CIMNote*]*
   (lambda (note)
     (if (null? note)
@@ -133,7 +131,6 @@
     void))
 
 (bind-poly print CIMNote_print)
-
 
 (bind-func retrieve_note
   (lambda (idx)
@@ -650,7 +647,7 @@
             (aset! rhythmbins idx 3)))
       (+ 72 (* idx 4)))))
 
-(bind-func rhythm_analysis
+(bind-func bpm_analysis
   (let ((previous_onset 0.0)
         (this_onset 0.0)
         (modr (i64tod 4))
@@ -679,12 +676,240 @@
             (set! previous_onset this_onset)
             void)))))
 
+;; root (as pc) and major/minor #t/#f 
+(bind-type CIMKey <i64,i1>)
+;; maj 2 2 1 2 2 2 1
+;; min 2 1 2 2 1 2 2
+;;     2 1 2 2 2 1 2
+;;     2 1 2 2 1 2 1
+
+(bind-func weighted_pcs
+  (let ((i 0) (j 0)
+        (tmppcs:|12,i64|* (alloc))
+        (tmpweight:|12,i64|* (alloc)))
+    (lambda (pcs:|12,i64|* weighted:|12,i64|*)
+      (dotimes (i 12)
+        (aset! tmppcs i (aref pcs i)))
+      (sort (cast tmppcs i64*) 12)
+      (dotimes (i 12)
+        (aset! tmpweight i (aref tmppcs (- 11 i))))
+      (dotimes (i 12)
+        (aset! tmppcs i (aref pcs i)))
+      (dotimes (i 12)
+        (dotimes (j 12)
+          (if (= (aref tmppcs j) (aref tmpweight i))
+              (begin
+                (aset! weighted i j)
+                (aset! tmpweight i -2)
+                (aset! tmppcs j -1)))))
+      void)))
+
+(bind-func ivls_from_pcs
+  (let ((prev -1)
+        (i 0) (j 0)
+        (total 0)
+        (cnt 0))
+    (lambda (pcs:|12,i1|* ivls:|12,i64|*)
+      (dotimes (i 12)
+        (set! cnt 0) (set! total 0) (set! prev -1)
+        (aset! ivls i 0)
+        (if (aref pcs i)
+            (begin
+              (set! total (+ total 1))
+              (if (> prev -1)
+                  (begin (aset! ivls cnt (- i prev))
+                         (set! cnt (+ cnt 1))))
+              (set! prev i))))
+      void)))
+
+;; where guesses are weight ordered pitch classes
+(bind-func best_root_match_against_pcs
+  (lambda (pcs:|12,i1|* guesses:|12,i64|*)
+    (let ((i 0) (pc -1) (lgst 0) (idx 0)
+          (results:|4,i64|* (alloc)))
+      ;; test best 3 choices
+      (dotimes (i 4)
+        (aset! results i 0)
+        (set! pc (aref guesses i))
+        (if (aref pcs (% (+ pc 7) 12)) ;; match 5th
+            (aset! results i (+ 3 (aref results i))))
+        (if (and (aref pcs (% (+ pc 3) 12)) ;; match minor 3rd
+                 (not (aref pcs (% (+ pc 4) 12))))
+            (aset! results i (+ 2 (aref results i))))
+        (if (and (aref pcs (% (+ pc 4) 12)) ;; match major 3rd
+                 (not (aref pcs (% (+ pc 3) 12))))
+            (aset! results i (+ 2 (aref results i))))
+        (if (and (aref pcs (% (+ pc 4) 12)) ;; match major 3rd + NOT min 7th
+                 (not (aref pcs (% (+ pc 10) 12))))
+            (aset! results i (+ 1 (aref results i))))
+        (if (and (aref pcs (% (+ pc 8) 12)) ;; match minor 6th
+                 (not (aref pcs (% (+ pc 9) 12))))
+            (aset! results i (+ 1 (aref results i))))
+        (if (and (aref pcs (% (+ pc 9) 12)) ;; match major 6th
+                 (not (aref pcs (% (+ pc 8) 12))))
+            (aset! results i (+ 1 (aref results i))))
+        (if (aref pcs (% (+ pc 5) 12))  ;; match 4th
+            (aset! results i (+ 1 (aref results i))))
+        (if (aref pcs (% (+ pc 2) 12)) ;; match 2nd
+            (aset! results i (+ 1 (aref results i)))))
+      (dotimes (i 4)
+        ;; (printout "match " i ">"  (aref guesses i) " " (aref results i) "\n")
+        (if (> (aref results i) lgst)
+            (begin
+              (set! idx i)
+              (set! lgst (aref results i)))))
+      (aref guesses idx))))
+
+;; true for maj
+;; false for min
+(bind-func best_majmin_guess
+  (lambda (pcs:|12,i1|* root:i64)
+    (cond ((and (aref pcs (% (+ root 3) 12))
+                (not (aref pcs (% (+ root 4) 12))))
+           #f) ;; if minor 3rd and NO maj 3rd -> minor
+          ((and (aref pcs (% (+ root 4) 12))
+                (not (aref pcs (% (+ root 3) 12))))
+           #t) ;; if major 3rd and NO min 3rd -> major
+          ((and (or (aref pcs (% (+ root 8) 12))
+                    (aref pcs (% (+ root 10) 12)))
+                (aref pcs (% (+ root 3) 12)))
+           #f) ;; if minor 3rd and flat 6 or flat 7 -> minor 
+          ((and (aref pcs (% (+ root 9) 12))
+                (aref pcs (% (+ root 4) 12)))
+           #t) ;; if major 3rd and major 6th -> major
+          (else #t)))) ;; if in doubt go major
+
+(bind-func total_key_errors
+  (lambda (pcs:|12,i1|* root majmin:i1)
+    (let ((res 0))
+      (if majmin
+          (begin ;; major
+            (if (aref pcs (% (+ root 1) 12))
+                (set! res (+ res 1)))
+            (if (aref pcs (% (+ root 3) 12))
+                (set! res (+ res 1)))
+            (if (aref pcs (% (+ root 6) 12))
+                (set! res (+ res 1)))
+            (if (aref pcs (% (+ root 8) 12))
+                (set! res (+ res 1)))
+            (if (aref pcs (% (+ root 10) 12)) ;; flat 7 - maybe not??
+                (set! res (+ res 1))))
+          (begin ;; minor
+            (if (aref pcs (% (+ root 1) 12))
+                (set! res (+ res 1)))
+            (if (aref pcs (% (+ root 4) 12))
+                (set! res (+ res 1)))
+            (if (aref pcs (% (+ root 6) 12))
+                (set! res (+ res 1)))
+            (if (aref pcs (% (+ root 9) 12))
+                (set! res (+ res 1)))))
+      (if (and (aref pcs (% (+ root 3) 12))
+               (aref pcs (% (+ root 4) 12)))
+          (+ res 2)
+          res))))
+
+;; where num is the num to set
+;; where bit is the bit index to set
+;; and where val is either 0 or 1
+(bind-func bitset
+  (lambda (num:i16 bit:i16 val:i16)
+    (^ (& (^ -1:i16 num) (<< 1:i16 bit)) num)))
+
+(bind-func key_analysis
+  (let ((ivls:|12,i64|* (alloc))
+        (pitchset:|12,i1|* (alloc))
+        (pitchset_hist:|12,i64|* (alloc))        
+        (weighted_set:|12,i64|* (alloc))
+        (chord:|12,i1|* (alloc))
+        (chords:|4096,i64|* (alloc))
+        (previous_onset:double 0.0)
+        (root 0)
+        (majmin #t)
+        (idx:i16 0) (i 0)
+        (pc 0))
+    (lambda (note:CIMNote*)
+      (set! idx 0)
+      ;; first record pitchset stuff
+      (set! pc (% (cim_note_pitch note) 12))
+      (aset! pitchset_hist pc (+ (aref pitchset_hist pc) 1))
+      (aset! pitchset pc #t)
+      (weighted_pcs pitchset_hist weighted_set)
+      (ivls_from_pcs pitchset ivls)
+      ;; next record chord stuff
+      (if (< (- (cim_note_onset note) previous_onset) 0.05)
+          (begin (aset! chord pc #t) void)
+          (begin ;; else marks the end of the last chord
+            (dotimes (i 12)
+              (if (aref chord i)
+                  (set! idx (bitset idx i 1))))
+            (aset! chords idx (+ (aref chords idx) 1))
+            void))
+      (set! previous_onset (cim_note_onset note))
+      ;; try a simple root+majmin guess
+      (set! root (best_root_match_against_pcs pitchset weighted_set))
+      (set! majmin (best_majmin_guess pitchset root))
+      ;; printout
+      ;; (printout "pitchset:")
+      ;; (dotimes (i 12)
+      ;;   (printout (aref pitchset i) ","))
+      ;; (println)
+      ;; (printout "pitchsethist:")
+      ;; (dotimes (i 12)
+      ;;   (printout (aref pitchset_hist i) ","))
+      ;; (println)
+      ;; (printout "weigthed:")
+      ;; (dotimes (i 12)
+      ;;   (printout (aref weighted_set i) ","))
+      ;; (println)
+      ;; printout
+      (println "root:" root "maj?:" majmin "errors:" (total_key_errors pitchset root majmin))
+      (if (> (total_key_errors pitchset root majmin) 1)
+          (begin
+            (println "reset")
+            (dotimes (i 12)
+              (aset! pitchset i #f)
+              (aset! pitchset_hist i 0))))
+      void)))
+
+(bind-func print_key_bins
+  (lambda ()
+    (let ((pcs:|12,i64|* (key_analysis.pitchset_hist))
+          (i 0))
+      (dotimes (i 12)
+        (printout (aref pcs i) ","))
+      (println "")
+      void)))
+
+;; negative numbers for minor
+;; positive numbers for major
+;; -12 for C minor
+(bind-func current_key
+  (lambda ()
+    (let ((root:i64 (key_analysis.root))
+          (majmin:i1 (key_analysis.majmin))
+          (pcs:|12,i1|* (key_analysis.pitchset))
+          (i 0))
+      ;; (printout "pset:")
+      ;; (dotimes (i 12)
+      ;;   (printout (aref pcs i) ","))
+      ;; (println)
+      (if majmin
+          root
+          (if (= root 0) -12
+              (* -1 root))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Analysis
+;;
 (bind-func note_analysis
   (lambda (note:CIMNote*)
     (if (null? note) void
         (begin
           ;;(println ">>" note)          
-          (rhythm_analysis note)
+          (bpm_analysis note)
+          (key_analysis note)
           void))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

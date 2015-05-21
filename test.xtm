@@ -49,28 +49,18 @@
     ;; (print "75" "80" "85" "90" "95" "100" "105" "110" "115" "120")
     (print 'BPM: (current_bpm) "> ")
     (print_rhythm_bins)
-    (*metro* 'set-tempo (current_bpm))
+    (print 'KEY: (current_key) "> ")
+    (print_key_bins)
+    (*metro* 'set-tempo (current_bpm))    
     (callback (+ (now) (* .25 *second*)) 'print-bpm-loop)))
 
 (print-bpm-loop)
-(release_bpm_bins)
-
+;; (release_bpm_bins)
 
 ;; print out current midi buffer
 (dump_midi_buffer)
 ;; midi playback
 (midi_playback_d (now) *midi-out*)
-
-(bind-func test
-  (lambda (k:i1)
-    (println k)))
-
-(bind-func tt
-  (lambda ()
-    (test #t)))
-
-(test #f)
-
 ;; print out current note buffer
 (dump_note_buffer)
 ;; dump all note chunks with gap greater than 5.0 seconds
