@@ -4,6 +4,7 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(sys:load "../CIM_in_extempore/cimlib.xtm")
 ;; init MIDI stuff
 
 (define *midi-in* (midi_new_indevice))
@@ -37,25 +38,45 @@
 (fmsynth_fx.dfb .01)
 (fmsynth_fx.dfb .1)
 
+(define total-beat 0)
+
 (define test
   (lambda (beat dur)
-    (play fmsynth (+ 20. (* .5 (current_bpm))) 80 (* .1 dur))
-    (callback (*metro* (+ beat (* .5 dur))) 'test (+ beat dur) dur)))
+    (set! total-beat beat)
+    (playob 0 1 fmsynth 96 110 (* .1 dur))
+    ;;(playob 0 1 fmsynth (+ 40. (* .5 (current_bpm))) 90 (* .1 dur))
+    (callback (*metro* (+ beat (* .25 dur))) 'test (+ beat dur) dur)))
 
 (test (*metro* 'get-beat 4) 1)
 
-(define print-bpm-loop
-  (lambda ()
-    ;; (print "75" "80" "85" "90" "95" "100" "105" "110" "115" "120")
-    (print 'BPM: (current_bpm) "> ")
-    (print_rhythm_bins)
-    (print 'KEY: (current_key) "> ")
-    (print_key_bins)
-    (*metro* 'set-tempo (current_bpm))    
-    (callback (+ (now) (* .25 *second*)) 'print-bpm-loop)))
+(define update-metro
+  (lambda (bpm time beats)
+    (set! *metro* (make-metro bpm (cons time beats)))))
 
-(print-bpm-loop)
+(define analysis-loop
+  (let ((lasttime 0))
+    (lambda ()
+      ;; (print "75" "80" "85" "90" "95" "100" "105" "110" "115" "120")
+      ;; (print 'BPM: (current_bpm) "> ")
+      ;; (print_rhythm_bins)
+      ;; (print 'KEY: (current_key) "> ")
+      ;; (print_key_bins)
+      (if (<> lasttime (get_phase_time))
+          (begin
+            (set! lasttime (get_phase_time))
+            ;; (play-note (now) fmsynth 96 90 3000)
+            (println "change time!" lasttime)
+            (callback (+ lasttime (* *samplerate* (/ 60.0 (current_bpm))))
+                      'update-metro (current_bpm)
+                      (+ lasttime (* *samplerate* (/ 60.0 (current_bpm))))
+                      (+ total-beat 1))))
+      (callback (+ (now) (* .25 *second*)) 'bpm-loop))))
+
+(analysis-loop)
 ;; (release_bpm_bins)
+
+
+
 
 ;; print out current midi buffer
 (dump_midi_buffer)

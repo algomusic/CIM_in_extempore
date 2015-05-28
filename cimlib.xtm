@@ -862,7 +862,7 @@
       ;;   (printout (aref weighted_set i) ","))
       ;; (println)
       ;; printout
-      (println "root:" root "maj?:" majmin "errors:" (total_key_errors pitchset root majmin))
+     ;;  (println "root:" root "maj?:" majmin "errors:" (total_key_errors pitchset root majmin))
       (if (> (total_key_errors pitchset root majmin) 1)
           (begin
             (println "reset")
@@ -898,18 +898,261 @@
           (if (= root 0) -12
               (* -1 root))))))
 
+;; phase anslysis
+
+;; idx, time, phase, bpm, mass (total volume)
+(bind-type CIMTimeSlice <i64,i64,double,double,i64,i64>)
+(bind-val CIMTimeSlices |1000000,CIMTimeSlice|)
+(bind-val CIMTimeSliceIdx i64 0)
+
+(bind-func cim_tslice_idx
+  (lambda (x:CIMTimeSlice*)
+    (if (null? x) 0 ;; dangerous!
+        (tref x 0))))
+
+;; corresponds to EVENT onset
+(bind-func cim_tslice_time
+  (lambda (x:CIMTimeSlice*)
+    (if (null? x) -1
+        (tref x 1))))
+
+;; corresponds to NOTE onset
+(bind-func cim_tslice_onset
+  (lambda (x:CIMTimeSlice*)
+    (tref x 2)))
+
+(bind-func cim_tslice_phase
+  (lambda (x:CIMTimeSlice*)
+    (tref x 2)))
+
+(bind-func cim_tslice_bpm
+  (lambda (x:CIMTimeSlice*)
+    (if (null? x) -1
+        (tref x 4))))
+
+(bind-func cim_tslice_mass
+  (lambda (x:CIMTimeSlice*)
+    (tref x 5)))
+
+(bind-func cim_tslice_mass_append
+  (lambda (x:CIMTimeSlice* vol:i64)
+    (tset! x 5 (+ (tref x 5) vol))))
+
+(bind-func cim_tslice
+  (lambda (idx)
+    (if (or (< idx 0)
+            (> idx CIMTimeSliceIdx))
+        null
+        (aref-ptr CIMTimeSlices idx))))
+
+(bind-func cim_tslice_last
+  (lambda ()
+    (aref-ptr CIMTimeSlices CIMTimeSliceIdx)))
+
+(bind-func cim_tslice_add_onset
+  (lambda (time onset phase bpm mass)
+    (let ((grp (cim_tslice CIMTimeSliceIdx))) 
+      (tfill! grp CIMTimeSliceIdx time onset phase bpm mass)
+      (set! CIMTimeSliceIdx (+ CIMTimeSliceIdx 1))
+      grp)))
+
+(bind-func cim_tslice_start_of_bpm
+  (lambda (slice)
+    (let ((bpm (cim_tslice_bpm slice))
+          (idx (cim_tslice_idx slice)))
+      (while (= (cim_tslice_bpm slice) bpm)
+        (set! idx (- idx 1))
+        (set! slice (cim_tslice idx)))
+      slice)))
+
+(bind-func cim_tslice_end_of_bpm
+  (lambda (slice)
+    (let ((bpm (cim_tslice_bpm slice))
+          (idx (cim_tslice_idx slice)))
+      (while (= (cim_tslice_bpm slice) bpm)
+        (set! idx (+ idx 1))
+        (set! slice (cim_tslice idx)))
+      slice)))
+
+;; search from end
+;; if outside err range then return null
+;;
+;; both time and err in samples
+(bind-func find_tslice_closest_time
+  (lambda (time:i64 err)
+    (let ((idx CIMTimeSliceIdx)
+          (slice (cim_tslice idx))
+          (slice_high null)
+          (t (cim_tslice_time slice))
+          (t2:i64 0))
+      (while (> t time)
+        (set! idx (- idx 1))
+        (set! slice (cim_tslice idx))
+        (set! t (cim_tslice_time slice)))
+      (set! slice_high (cim_tslice (+ idx 1)))
+      (set! t2 (cim_tslice_time slice_high))
+      (if (< (llabs (- time t2))
+             (llabs (- time t)))
+          (set! slice slice_high))
+      (if (< (llabs (- time (cim_tslice_time slice)))
+             err)
+          slice
+          null))))
+
+
+(bind-type CIMTimeSliceRange <CIMTimeSlice*,CIMTimeSlice*>)
+
+;; inclusive on low end and high end
+(bind-func find_tslice_range
+  (let ((range (CIMTimeSliceRange null null)))
+    (lambda (t1 t2)
+      (let ((idx CIMTimeSliceIdx)
+            (slice (cim_tslice idx))
+            (slice_high null)
+            (slice_low null)
+            (t (cim_tslice_time slice)))
+        (tfill! range null null)        
+        (while (> t t2)
+          (set! idx (- idx 1))
+          (set! slice (cim_tslice idx))
+          (set! t (cim_tslice_time slice)))
+        (set! slice_high slice)
+        (while (>= t t1)
+          (set! idx (- idx 1))
+          (set! slice (cim_tslice idx))
+          (set! t (cim_tslice_time slice)))
+        (set! slice_low (cim_tslice (+ idx 1)))
+        (tfill! range slice_low slice_high)
+        range))))
+
+(bind-func total_tslice_beat_hits
+  (lambda (start end beat)
+    (let ((bpm (cim_tslice_bpm start))
+          (sidx (cim_tslice_idx start))
+          (eidx (cim_tslice_idx end))
+          (slice null)
+          (b (dtoi64 (* beat (/ 60.0 (i64tod bpm)) SRd)))
+          (stime (cim_tslice_time start))
+          (time 0)
+          (cnt 0)
+          (tolerance (dtoi64 (* 200.0 (/ 60. (i64tod bpm))))) ;; in samples
+          (diff 0)
+          (dmod 0)
+          (pos 0)
+          (i 0))
+      (dotimes (i (- eidx (+ sidx 1)))
+        (set! slice (cim_tslice (+ 1 sidx i)))
+        (set! time (cim_tslice_time slice))
+        (set! diff (- time stime))
+        (set! dmod (% diff b))
+        (if (or (< dmod tolerance)
+                (< (- dmod b) tolerance))
+            (+ cnt 1)))
+      cnt)))        
+
+(bind-func record_tslice
+  (let ((previous_onset 0.0)
+        (this_onset 0.0)
+        (bpm 0))
+    (lambda (time:i64 note:CIMNote*)
+      (set! bpm (current_bpm))
+      (set! this_onset (cim_note_onset note))
+      ;; if inter-offset less than 1/4 beat at current BPM
+      ;; then just add to the mass of the current slice
+      (if (< (- this_onset previous_onset) (* 0.25 (/ 60.0 (i64tod bpm))))
+          (begin (cim_tslice_mass_append (cim_tslice_last) (cim_note_volume note))
+                 void)
+          (begin (cim_tslice_add_onset time this_onset -1.0 bpm (cim_note_volume note))
+                 void))          
+      (cim_tslice_last))))
+
+;; pulse analysis
+
+(bind-val PhaseTime i64 0)
+
+(bind-func set_phase_time
+  (lambda (t)
+    (set! PhaseTime t)))
+
+(bind-func get_phase_time
+  (lambda ()
+    PhaseTime))
+
+;; where bucket is
+;; 1/4 1/3 1/2 1 2 3 4
+(bind-func pulse_analysis
+  (let ((bpm 0)
+        (err 0.0)
+        (i 0)
+        (bucket:|4,i64|* (alloc)))
+    (lambda (time)
+      (printout "bucket: ")
+      (dotimes (i 4)
+        (printout (aref bucket i) ","))
+      (println)
+      (if (<> (current_bpm) bpm)
+          (begin (println "BPM CHANGE" (current_bpm) bpm)
+                 (set! bpm (current_bpm))
+                 (set_phase_time time)
+                 (dotimes (i 4) (aset! bucket i 0))))
+      (set! err (% (/ (/ (i64tod (- time PhaseTime)) SRd) (/ 60.0 (i64tod bpm))) 1.0))
+      (cond ((or (< err 0.15)
+                 (> err 0.85))
+             (aset! bucket 0 (+ 1 (aref bucket 0)))
+             void)
+            ((and (> err 0.4)
+                  (< err 0.6))
+             (aset! bucket 1 (+ 1 (aref bucket 1)))
+             (if (< (* 2 (aref bucket 0))
+                    (aref bucket 1))
+                 (begin
+                   (println "1/2 NOTE CHANGE")
+                   (dotimes (i 4) (aset! bucket i 0))
+                   (aset! bucket 0 2)
+                   (set! PhaseTime time)))
+             void)
+            ((or (and (> err 0.2)
+                     (< err 0.3))
+                (and (> err 0.7)
+                     (< err 0.8)))
+             (aset! bucket 2 (+ 1 (aref bucket 2)))
+             (if (< (* 3 (aref bucket 0))
+                    (aref bucket 2))
+                 (begin
+                   (println "1/4 NOTE CHANGE")
+                   (dotimes (i 4) (aset! bucket i 0))
+                   (aset! bucket 0 2)
+                   (set! PhaseTime time)))
+             void)
+            (else
+             (aset! bucket 3 (+ 1 (aref bucket 3)))
+             (if (< (* 2 (aref bucket 0))
+                    (aref bucket 3))
+                 (begin (dotimes (i 4) (aset! bucket i 0))
+                        (println "ERR CHANGE")
+                        (aset! bucket 0 1)
+                        (set! PhaseTime time)))
+             void))
+      ;; might not need this but ...
+      (if (= (aref bucket 0) 6)
+          (begin (dotimes (i 4)
+                   (aset! bucket i (/ (aref bucket i) 2)))
+                 (aset! bucket 0 4)))
+      void)))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; Analysis
 ;;
-(bind-func note_analysis
-  (lambda (note:CIMNote*)
+(bind-func analysis
+  (lambda (time:i64 note:CIMNote*)
     (if (null? note) void
         (begin
           ;;(println ">>" note)          
           (bpm_analysis note)
           (key_analysis note)
+          (pulse_analysis time)
           void))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -917,18 +1160,21 @@
 ;; write a midi receiver which writes to MSG Buffer and Note Buffer
 ;;
 (bind-func midi_msg_buffer_receiver
-  (let ((type:i8 0) (chan:i8 0) (a:i8 0) (b:i8 0) (idx -1))
+  (let ((type:i8 0) (chan:i8 0) (a:i8 0) (b:i8 0) (idx -1)
+        (note:CIMNote* null))
     (lambda (time:double len:i64 msg:i8*)
       (set! type (>> (pref msg 0) 4))
       (set! chan (& (pref msg 0) 15))
       (set! a (pref msg 1))
       (set! b (pref msg 2))
       (if (or (= type MIDI_NOTE_ON) (= type MIDI_NOTE_OFF) (= type MIDI_CC))
-          (begin
-;            (println "midi-in" type chan a b)            
-            (record_midi_msg (now) type (convert chan) (convert a) (convert b))
-            (set! idx (record_note (now) type (convert chan) (convert a) (convert b)))
-            (note_analysis (retrieve_note idx))
+          (let ((t (now)))
+            ;; (println "midi-in" type chan a b)            
+            (record_midi_msg t type (convert chan) (convert a) (convert b))
+            (set! idx (record_note t type (convert chan) (convert a) (convert b)))
+            (set! note (retrieve_note idx))
+            ;;(record_tslice t note)
+            (analysis t note)
             void)
           void))))
 
