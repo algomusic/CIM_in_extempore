@@ -608,49 +608,76 @@
 ;;
 ;; analysis
 
+(bind-val NumRhythmBins i64 24)
 (bind-val rhythmbins |24,i64|)
 
 (bind-func release_bpm_bins
   (lambda ()
-    (doloop (i 24)
+    (doloop (i NumRhythmBins)
       (aset! rhythmbins i 0))))
+
+(bind-val bpm_low double 72.0)
+(bind-val bpm_high double 144.0)
+(bind-val bpm_mod double 4.0)
 
 (bind-func print_rhythm_bins
   (lambda ()
-    (doloop (i 24)
-      (printout (aref rhythmbins i) ","))
+    (doloop (i NumRhythmBins)
+      (printout (+ (* i (dtoi64 bpm_mod)) (dtoi64 bpm_low)) "[" (aref rhythmbins i) "],"))
     (println)))
 
 (bind-func decrement_bins
   (lambda ()
-    (doloop (i 24)
+    (doloop (i NumRhythmBins)
       (if (> (aref rhythmbins i) 0)
           (aset! rhythmbins i (- (aref rhythmbins i) 1))))
     void))
-    
+
 (bind-func current_bpm
-  (let ((firstm 0) (secondm 0) (i 0) (idx 0))
+  (let ((useweighting #f)
+        (firstm 0) (firsti 0) (secondm 0) (secondi 0) (i 0) (idx 0)
+        (weight 0.0) (bpm 0.0) (firstbpm 0.0) (secondbpm 0.0)
+        (current_bpm 120.0))
     (lambda ()
-      (set! firstm 0) (set! secondm 0) (set! idx 0)
-      (dotimes (i 24)
+      (set! firstm 0) (set! firsti 0) (set! secondm 0) (set! secondi i) (set! idx 0)
+      (dotimes (i NumRhythmBins)
         (if (> (aref rhythmbins i) secondm)
-            (set! secondm (aref rhythmbins i)))
+            (begin (set! secondi i)
+                   (set! secondm (aref rhythmbins i))))
         (if (> (aref rhythmbins i) firstm)
             (begin
+              (set! secondi firsti)
               (set! secondm firstm)              
               (set! firstm (aref rhythmbins i))
+              (set! firsti i)
               (set! idx i))))
+      ;; (printout "first: [" firsti "," firstm "] second: [" secondi "," secondm "]\n")      
+      (set! firstbpm (+ bpm_low (* (i64tod firsti) bpm_mod)))
+      (set! secondbpm (+ bpm_low (* (i64tod secondi) bpm_mod)))
+      (set! weight (if (= 0 firstm) 1.0 (/ (i64tod secondm) (i64tod firstm))))
+      ;; use weight
+      (if useweighting
+          (set! bpm (+ firstbpm (* weight (- secondbpm firstbpm))))
+          (set! bpm firstbpm))
+      ;; (printout "bpm:" bpm " bpm1:" firstbpm " bpm2:" secondbpm " "
+      ;;           (* weight (- secondbpm firstbpm)) " weight:" weight "\n")
       (if (> firstm 7)
           (begin
-            (dotimes (i 24)
+            (dotimes (i NumRhythmBins)
               (aset! rhythmbins i 0))
             (aset! rhythmbins idx 3)))
-      (+ 72 (* idx 4)))))
+      (if (> (fabs (- current_bpm bpm)) 2.0)
+          (begin
+            ;;(println "changing bpm: " current_bpm " to " bpm)
+            (set! current_bpm bpm)))
+      (dtoi64 current_bpm))))
 
 (bind-func bpm_analysis
   (let ((previous_onset 0.0)
         (this_onset 0.0)
-        (modr (i64tod 4))
+        ;; (modr (i64tod 2))
+        ;; (low 72.0)
+        ;; (high (* low 2.0))
         (modv 0.0)
         (idx 0)
         (bin 0.0))
@@ -660,15 +687,15 @@
                (< (- this_onset previous_onset) 2.0))
           (begin
             (set! bin (* (/ 1.0 (- this_onset previous_onset)) 60.0))
-            (while (or (< bin 72.0)
-                       (>= bin 144.0))
-              (if (< bin 72.0) (set! bin (* 2.0 bin)))
-              (if (>= bin 144.0) (set! bin (* 0.5 bin))))
-            (set! modv (% bin modr))            
-            (if (< modv (* .5 modr))
+            (while (or (< bin bpm_low)
+                       (>= bin bpm_high))
+              (if (< bin bpm_low) (set! bin (* 2.0 bin)))
+              (if (>= bin bpm_high) (set! bin (* 0.5 bin))))
+            (set! modv (% bin bpm_mod))
+            (if (< modv (* 0.5 bpm_mod))
                 (set! bin (- bin modv))
-                (set! bin (+ bin (- modr modv))))
-            (set! idx (/ (- (dtoi64 bin) 72) (dtoi64 modr)))
+                (set! bin (+ bin (- bpm_mod modv))))
+            (set! idx (/ (- (dtoi64 bin) (dtoi64 bpm_low)) (dtoi64 bpm_mod)))
             (aset! rhythmbins idx (+ 1 (aref rhythmbins idx)))
             (set! previous_onset this_onset)
             void)
@@ -726,38 +753,60 @@
 (bind-func best_root_match_against_pcs
   (lambda (pcs:|12,i1|* guesses:|12,i64|*)
     (let ((i 0) (pc -1) (lgst 0) (idx 0)
-          (results:|4,i64|* (alloc)))
-      ;; test best 3 choices
+          (results:|12,i64|* (alloc)))
+      ;; test best 4 choices
       (dotimes (i 4)
         (aset! results i 0)
         (set! pc (aref guesses i))
+        (if (aref pcs (% (+ pc 0) 12)) ;; match yourself of course!
+            (aset! results i (+ 5 (aref results i))))
         (if (aref pcs (% (+ pc 7) 12)) ;; match 5th
             (aset! results i (+ 3 (aref results i))))
-        (if (and (aref pcs (% (+ pc 3) 12)) ;; match minor 3rd
+        (if (and (aref pcs (% (+ pc 3) 12)) ;; match minor 3rd (not major 3rd)
                  (not (aref pcs (% (+ pc 4) 12))))
             (aset! results i (+ 2 (aref results i))))
-        (if (and (aref pcs (% (+ pc 4) 12)) ;; match major 3rd
+        (if (and (aref pcs (% (+ pc 4) 12)) ;; match major 3rd (not minor 3rd)
                  (not (aref pcs (% (+ pc 3) 12))))
             (aset! results i (+ 2 (aref results i))))
+        (if (and (aref pcs (% (+ pc 4) 12)) ;; if maj + min 3rd subtract
+                 (aref pcs (% (+ pc 3) 12)))
+            (aset! results i (+ -2 (aref results i)))) 
         (if (and (aref pcs (% (+ pc 4) 12)) ;; match major 3rd + NOT min 7th
                  (not (aref pcs (% (+ pc 10) 12))))
             (aset! results i (+ 1 (aref results i))))
-        (if (and (aref pcs (% (+ pc 8) 12)) ;; match minor 6th
+        (if (and (aref pcs (% (+ pc 8) 12)) ;; match minor 6th (not major 6)
                  (not (aref pcs (% (+ pc 9) 12))))
             (aset! results i (+ 1 (aref results i))))
-        (if (and (aref pcs (% (+ pc 9) 12)) ;; match major 6th
+        (if (and (aref pcs (% (+ pc 9) 12)) ;; match major 6th (not minor 6)
                  (not (aref pcs (% (+ pc 8) 12))))
             (aset! results i (+ 1 (aref results i))))
+        (if (and (aref pcs (% (+ pc 8) 12)) ;; if maj + min 6th subtract
+                 (aref pcs (% (+ pc 9) 12)))
+            (aset! results i (+ -2 (aref results i))))
+        (if (and (aref pcs (% (+ pc 10) 12)) ;; if maj 3rd + minor 7th + maj 7th BAD!
+                 (aref pcs (% (+ pc 11) 12))
+                 (aref pcs (% (+ pc 4) 12)))
+            (aset! results i (+ -3 (aref results i))))
         (if (aref pcs (% (+ pc 5) 12))  ;; match 4th
             (aset! results i (+ 1 (aref results i))))
+        (if (aref pcs (% (+ pc 6) 12))  ;; negative match augmented 4th dim 5th
+            (aset! results i (+ -3 (aref results i))))
+        (if (aref pcs (% (+ pc 1) 12)) ;; negative match minor 2nd
+            (aset! results i (+ -2 (aref results i))))
         (if (aref pcs (% (+ pc 2) 12)) ;; match 2nd
             (aset! results i (+ 1 (aref results i)))))
-      (dotimes (i 4)
-        ;; (printout "match " i ">"  (aref guesses i) " " (aref results i) "\n")
-        (if (> (aref results i) lgst)
-            (begin
-              (set! idx i)
-              (set! lgst (aref results i)))))
+      ;; (printout "guesses: ")
+      ;; (dotimes (i 6)
+      ;;   (printout (aref guesses i) "[" (aref results i) "], ") ;;"\n")
+      ;;   (if (> (aref results i) lgst)
+      ;;       (begin
+      ;;         (set! idx i)
+      ;;         (set! lgst (aref results i)))))
+      ;; (printout " best> " (aref guesses idx) "  pcs:<")
+      ;; (dotimes (i 12)
+      ;;   (if (aref pcs i)
+      ;;       (printout i ",")))
+      ;; (println ">")
       (aref guesses idx))))
 
 ;; true for maj
@@ -788,8 +837,8 @@
                 (set! res (+ res 1)))
             (if (aref pcs (% (+ root 3) 12))
                 (set! res (+ res 1)))
-            (if (aref pcs (% (+ root 6) 12))
-                (set! res (+ res 1)))
+            (if (aref pcs (% (+ root 6) 12)) ;; dim 5 gets extra
+                (set! res (+ res 3)))
             (if (aref pcs (% (+ root 8) 12))
                 (set! res (+ res 1)))
             (if (aref pcs (% (+ root 10) 12)) ;; flat 7 - maybe not??
@@ -799,10 +848,11 @@
                 (set! res (+ res 1)))
             (if (aref pcs (% (+ root 4) 12))
                 (set! res (+ res 1)))
-            (if (aref pcs (% (+ root 6) 12))
-                (set! res (+ res 1)))
+            (if (aref pcs (% (+ root 6) 12)) ;; dim 5 gets extra
+                (set! res (+ res 3)))
             (if (aref pcs (% (+ root 9) 12))
                 (set! res (+ res 1)))))
+      ;; (println "root:" root "err:" res)
       (if (and (aref pcs (% (+ root 3) 12))
                (aref pcs (% (+ root 4) 12)))
           (+ res 2)
@@ -862,10 +912,10 @@
       ;;   (printout (aref weighted_set i) ","))
       ;; (println)
       ;; printout
-     ;;  (println "root:" root "maj?:" majmin "errors:" (total_key_errors pitchset root majmin))
+      ;;(println "root:" root "maj?:" majmin "errors:" (total_key_errors pitchset root majmin))
       (if (> (total_key_errors pitchset root majmin) 1)
           (begin
-            (println "reset")
+            ;;(println "reset")
             (dotimes (i 12)
               (aset! pitchset i #f)
               (aset! pitchset_hist i 0))))
@@ -889,10 +939,6 @@
           (majmin:i1 (key_analysis.majmin))
           (pcs:|12,i1|* (key_analysis.pitchset))
           (i 0))
-      ;; (printout "pset:")
-      ;; (dotimes (i 12)
-      ;;   (printout (aref pcs i) ","))
-      ;; (println)
       (if majmin
           root
           (if (= root 0) -12
@@ -999,7 +1045,6 @@
           slice
           null))))
 
-
 (bind-type CIMTimeSliceRange <CIMTimeSlice*,CIMTimeSlice*>)
 
 ;; inclusive on low end and high end
@@ -1078,18 +1123,22 @@
   (lambda ()
     PhaseTime))
 
-;; where bucket is
-;; 1/4 1/3 1/2 1 2 3 4
+
+
+;;  FIX ME !!!!!!!!!!!!!!!
+;;  need to fix cases of err, 1/2 and 1/4 being (2 * 1) > 0
+;;  i.e. need to fix cases where 1/2,1/4,err get 1 value
+;;  before 1/1 even gets started!
 (bind-func pulse_analysis
   (let ((bpm 0)
         (err 0.0)
         (i 0)
         (bucket:|4,i64|* (alloc)))
     (lambda (time)
-      (printout "bucket: ")
-      (dotimes (i 4)
-        (printout (aref bucket i) ","))
-      (println)
+      ;; (printout "bucket: ")
+      ;; (dotimes (i 4)
+      ;;   (printout (aref bucket i) ","))
+      ;; (println)
       (if (<> (current_bpm) bpm)
           (begin (println "BPM CHANGE" (current_bpm) bpm)
                  (set! bpm (current_bpm))
@@ -1151,8 +1200,8 @@
         (begin
           ;;(println ">>" note)          
           (bpm_analysis note)
-          (key_analysis note)
           (pulse_analysis time)
+          (key_analysis note)
           void))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

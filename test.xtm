@@ -40,6 +40,8 @@
 
 (define total-beat 0)
 
+(define *current-key* 0)
+
 (define test
   (lambda (beat dur)
     (set! total-beat beat)
@@ -57,10 +59,11 @@
   (let ((lasttime 0))
     (lambda ()
       ;; (print "75" "80" "85" "90" "95" "100" "105" "110" "115" "120")
-      ;; (print 'BPM: (current_bpm) "> ")
+      (print 'BPM: (current_bpm) "> ")
       ;; (print_rhythm_bins)
-      ;; (print 'KEY: (current_key) "> ")
+      (print 'KEY: (current_key) "> ")
       ;; (print_key_bins)
+      ;; (set! *current-key* (current_key))
       (if (<> lasttime (get_phase_time))
           (begin
             (set! lasttime (get_phase_time))
@@ -70,7 +73,7 @@
                       'update-metro (current_bpm)
                       (+ lasttime (* *samplerate* (/ 60.0 (current_bpm))))
                       (+ total-beat 1))))
-      (callback (+ (now) (* .25 *second*)) 'bpm-loop))))
+      (callback (+ (now) (* .25 *second*)) 'analysis-loop))))
 
 (analysis-loop)
 ;; (release_bpm_bins)

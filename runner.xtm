@@ -1,0 +1,94 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; init midi stuff
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(sys:load "../CIM_in_extempore/cimlib.xtm")
+;; init MIDI stuff
+
+(define *midi-in* (midi_new_indevice))
+(define *midi-out* (midi_new_outdevice))
+
+;; query for valid midi output devices
+(midi_query_outports *midi-out*)
+(midi_open_outport *midi-out* 0)
+;; query for valid midi input
+(midi_query_inports *midi-in*)
+(midi_open_inport *midi-in* 0)
+
+;; register a *midi-in* to "midi_callback"
+(midi_register_device *midi-in* "midi_msg_buffer_receiver")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(sys:load "libs/external/instruments_ext.xtm")
+
+(bind-func dsp:DSP 1000000
+  (let ((t 0))
+    (lambda (in time chan dat)
+      (if (= t 0) (set! t time))
+      (if (< chan 2)
+          (+ (fmsynth in time chan dat)
+             0.0)
+          0.0))))
+
+(dsp:set! dsp)
+
+(fmsynth_fx.dfb .01)
+(fmsynth_fx.dfb .1)
+
+(define total-beat 0)
+
+(define *current-key* 0)
+
+(define test
+  (let ((cnt 0))
+    (lambda (beat dur)
+      (set! cnt (+ cnt 1))
+      (set! total-beat beat)
+      (let* ((maj? (if (< *current-key* 0) #f #t))
+             (key (if maj? *current-key* (modulo (* *current-key* -1) 12))))
+        (playob 0 1 fmsynth (+ key 48) 90 (* .4 dur) 1.0 0.5)
+        (playob 0 1 fmsynth (+ key 60) 70 (* .3 dur) 1.0 0.5)        
+        (map (lambda (p i)
+               (play (* i 1/4) fmsynth p 70 (* .1 dur)))
+             (pc:make-chord 60 96 3 (pc:chord (modulo key 12) (if maj? '^ '-)))
+             (list 1 2 3))
+        (if (= (modulo cnt 2) 0)
+            (println (list-ref (list 'C 'C# 'D 'Eb 'E 'F 'F# 'G 'Ab 'A 'Bb 'B)
+                               (modulo key 12))
+                     (if maj? 'major 'minor)
+                     '@ (current_bpm) 'bpm))
+        (callback (*metro* (+ beat (* .25 dur))) 'test (+ beat dur) dur)))))
+
+(test (*metro* 'get-beat 4) 1)
+
+(define update-metro
+  (lambda (bpm time beats)
+    (set! *metro* (make-metro bpm (cons time beats)))))
+
+(define analysis-loop
+  (let ((lasttime 0))
+    (lambda ()
+      ;;(println 'hi)
+      ;; (println "75" "80" "85" "90" "95" "100" "105" "110" "115" "120")
+      ;; (print 'BPM: (current_bpm) "> ")
+      ;; (print_rhythm_bins)
+      ;(print 'KEY: (current_key) "> ")
+      ;(print_key_bins)
+      ;;(println)      
+      (set! *current-key* (current_key))
+      (if (<> lasttime (get_phase_time))
+          (begin
+            (set! lasttime (get_phase_time))
+            ;; (play-note (now) fmsynth 96 90 3000)
+            (println "change time!" lasttime)
+            (callback (+ lasttime (* *samplerate* (/ 60.0 (current_bpm))))
+                      'update-metro (current_bpm)
+                      (+ lasttime (* *samplerate* (/ 60.0 (current_bpm))))
+                      (+ total-beat 1))))
+      (callback (+ (now) (* .25 *second*)) 'analysis-loop))))
+
+(analysis-loop)
+;; (release_bpm_bins)
