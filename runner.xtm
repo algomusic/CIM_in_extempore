@@ -5,6 +5,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (sys:load "../CIM_in_extempore/cimlib.xtm")
+(sys:load "libs/core/pc_ivl.xtm")
 ;; init MIDI stuff
 
 (define *midi-in* (midi_new_indevice))
@@ -35,12 +36,32 @@
 
 (dsp:set! dsp)
 
-(fmsynth_fx.dfb .01)
-(fmsynth_fx.dfb .1)
+;;(fmsynth_fx.dfb .01)
+(fmsynth_fx.dfb .4)
 
 (define total-beat 0)
 
 (define *current-key* 0)
+
+(define play-chunk
+  (lambda (beat inst gap)
+    (let* ((chunk (find_random_chunk gap)) ;;(find_chunk_a idx gap))
+           (size (cim_chunk_size chunk))
+           (maj? (if (< *current-key* 0) #f #t))
+           (key (if maj? *current-key* (modulo (* *current-key* -1) 12)))
+           (scale (pc:scale key (if maj? 'ionian 'aeolian))))
+      (CIMChunk_print chunk)
+      (println)
+      (println '---------------)
+      (println key maj? scale)
+      (if (= (cim_chunk_valid chunk) 1)
+          (dotimes (i size)
+            (play (+ 0 (cim_chunk_note_onset chunk i))
+                  inst
+                  (pc:quantize (cim_chunk_note_pitch chunk i) scale)
+                  (cim_chunk_note_volume chunk i)
+                  (* .8 (cim_chunk_note_beats chunk i))
+                  0.5 1.0))))))
 
 (define test
   (let ((cnt 0))
@@ -49,18 +70,20 @@
       (set! total-beat beat)
       (let* ((maj? (if (< *current-key* 0) #f #t))
              (key (if maj? *current-key* (modulo (* *current-key* -1) 12))))
-        (playob 0 1 fmsynth (+ key 48) 90 (* .4 dur) 1.0 0.5)
-        (playob 0 1 fmsynth (+ key 60) 70 (* .3 dur) 1.0 0.5)        
+        (playob 0 1 fmsynth (+ key 48) 70 (* .4 dur) 1.0 0.5)
+        (playob 0 1 fmsynth (+ key 60) 50 (* .3 dur) 1.0 0.5)
+        (if (= 0 (modulo beat 8))
+            (play-chunk beat fmsynth 1.5))
         (map (lambda (p i)
-               (play (* i 1/4) fmsynth p 70 (* .1 dur)))
+               (play (* i 1/4) fmsynth p 50 (* .1 dur)))
              (pc:make-chord 60 96 3 (pc:chord (modulo key 12) (if maj? '^ '-)))
              (list 1 2 3))
-        (if (= (modulo cnt 2) 0)
-            (println (list-ref (list 'C 'C# 'D 'Eb 'E 'F 'F# 'G 'Ab 'A 'Bb 'B)
-                               (modulo key 12))
-                     (if maj? 'major 'minor)
-                     '@ (current_bpm) 'bpm))
-        (callback (*metro* (+ beat (* .25 dur))) 'test (+ beat dur) dur)))))
+        ;; (if (= (modulo cnt 2) 0)
+        ;;     (println (list-ref (list 'C 'C# 'D 'Eb 'E 'F 'F# 'G 'Ab 'A 'Bb 'B)
+        ;;                        (modulo key 12))
+        ;;              (if maj? 'major 'minor)
+        ;;              '@ (current_bpm) 'bpm))
+        (callback (*metro* (+ beat (* .5 dur))) 'test (+ beat dur) dur)))))
 
 (test (*metro* 'get-beat 4) 1)
 
@@ -70,14 +93,7 @@
 
 (define analysis-loop
   (let ((lasttime 0))
-    (lambda ()
-      ;;(println 'hi)
-      ;; (println "75" "80" "85" "90" "95" "100" "105" "110" "115" "120")
-      ;; (print 'BPM: (current_bpm) "> ")
-      ;; (print_rhythm_bins)
-      ;(print 'KEY: (current_key) "> ")
-      ;(print_key_bins)
-      ;;(println)      
+    (lambda (beat dur)
       (set! *current-key* (current_key))
       (if (<> lasttime (get_phase_time))
           (begin
@@ -88,7 +104,13 @@
                       'update-metro (current_bpm)
                       (+ lasttime (* *samplerate* (/ 60.0 (current_bpm))))
                       (+ total-beat 1))))
-      (callback (+ (now) (* .25 *second*)) 'analysis-loop))))
+      (callback (*metro* (+ beat (* 0.95 dur))) 'analysis-loop (+ beat dur) dur))))
 
-(analysis-loop)
-;; (release_bpm_bins)
+(analysis-loop (*metro* 'get-beat 4) 1)
+
+(define reset_buffers
+  (lambda ()
+    (note_buffer_reset)
+    (midi_msg_buffer_reset)))
+
+;; (reset_buffers)
