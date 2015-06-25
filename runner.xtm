@@ -4,6 +4,18 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(define midi-out-port 
+  (if (string=? "" (sys:cmdarg "midi-out"))
+      0
+      (string->number (sys:cmdarg "midi-out"))))
+
+(define midi-in-port 
+  (if (string=? "" (sys:cmdarg "midi-in"))
+      0
+      (string->number (sys:cmdarg "midi-in"))))
+
+(println "MIDI out port is" midi-out-port "MIDI in port is" midi-in-port)
+
 (sys:load "../CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/core/pc_ivl.xtm")
 ;; init MIDI stuff
@@ -13,10 +25,10 @@
 
 ;; query for valid midi output devices
 (midi_query_outports *midi-out*)
-(midi_open_outport *midi-out* 0)
+(midi_open_outport *midi-out* midi-out-port)
 ;; query for valid midi input
 (midi_query_inports *midi-in*)
-(midi_open_inport *midi-in* 0)
+(midi_open_inport *midi-in* midi-in-port)
 
 ;; register a *midi-in* to "midi_callback"
 (midi_register_device *midi-in* "midi_msg_buffer_receiver")
@@ -24,6 +36,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (sys:load "libs/external/instruments_ext.xtm")
+
+
 
 (bind-func dsp:DSP 1000000
   (let ((t 0))
@@ -74,15 +88,6 @@
         (playob 0 1 fmsynth (+ key 60) 50 (* .3 dur) 1.0 0.5)
         (if (= 0 (modulo beat 8))
             (play-chunk beat fmsynth 1.5))
-        (map (lambda (p i)
-               (play (* i 1/4) fmsynth p 50 (* .1 dur)))
-             (pc:make-chord 60 96 3 (pc:chord (modulo key 12) (if maj? '^ '-)))
-             (list 1 2 3))
-        ;; (if (= (modulo cnt 2) 0)
-        ;;     (println (list-ref (list 'C 'C# 'D 'Eb 'E 'F 'F# 'G 'Ab 'A 'Bb 'B)
-        ;;                        (modulo key 12))
-        ;;              (if maj? 'major 'minor)
-        ;;              '@ (current_bpm) 'bpm))
         (callback (*metro* (+ beat (* .5 dur))) 'test (+ beat dur) dur)))))
 
 (test (*metro* 'get-beat 4) 1)
