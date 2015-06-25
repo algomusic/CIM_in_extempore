@@ -87,10 +87,10 @@
 (define test
   (let ((cnt 0))
     (lambda (beat dur)
-      (println "pcs: " *pcs*
-               " low: " *low*
-               " high: " *high*
-               "density:" *density*)
+      ;; (println "pcs: " *pcs*
+      ;;          " low: " *low*
+      ;;          " high: " *high*
+      ;;          "density:" *density*)
       (set! cnt (+ cnt 1))
       (set! total-beat beat)
       (let* ((maj? (if (< *key* 0) #f #t))

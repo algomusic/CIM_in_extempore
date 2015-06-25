@@ -1553,7 +1553,7 @@
                 (t2 (dtoi64 (* SRd (- (clock_clock) (audio_clock_base)))))
                 (t t2))
             ;; (println t1 t2 (- t1 t2))            
-            (println "midi-in" type chan a b)            
+            ;; (println "midi-in" type chan a b)            
             (record_midi_msg t type (convert chan) (convert a) (convert b))
             (set! idx (record_note t type (convert chan) (convert a) (convert b)))
             (set! note (retrieve_note idx))
