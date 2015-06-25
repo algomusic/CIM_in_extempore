@@ -202,8 +202,8 @@
 (bind-poly find_note find_note_b)
 (bind-poly find_note find_note_c)
 
-;; valid, start note, finish note, size, onset, duration, bpm
-(bind-type CIMChunk <i1,CIMNote*,CIMNote*,i64,double,double,double>)
+;; valid, start note, finish note, size, onset, duration, bpm, homophonic(%)
+(bind-type CIMChunk <i1,CIMNote*,CIMNote*,i64,double,double,double,double>)
 
 (bind-func cim_chunk_valid
   (lambda (chunk:CIMChunk*)
@@ -239,6 +239,34 @@
   (lambda (chunk:CIMChunk*)
     (if (null? chunk) 0.0
         (tref chunk 6))))
+
+(bind-func cim_chunk_homophonic
+  (lambda (chunk:CIMChunk*)
+    (if (null? chunk) 0.0
+        (tref chunk 7))))
+
+;; percentage of overlapping notes 
+(bind-func set_chunk_homophonic_percentage
+  (lambda (chunk:CIMChunk*)
+    (let ((num (cim_chunk_size chunk))
+          (i 0)
+          (onset 0.0)
+          (duration 0.0)
+          (cnt:i64 0)
+          (note:CIMNote* null)
+          (idx (cim_note_index (cim_chunk_start chunk))))
+      (set! cnt 0)
+      (set! onset 0.0)
+      (set! duration 0.0)
+      (dotimes (i idx num)
+        (set! note (retrieve_note i))
+        (if (and (>= (cim_note_onset note) onset)
+                 (< (cim_note_onset note) duration))
+            (set! cnt (+ cnt 1)))
+        (set! onset (cim_note_onset note))        
+        (set! duration (+ onset (* 0.75 (cim_note_duration note)))))
+      (tset! chunk 7 (/ (i64tod cnt) (i64tod num)))
+      void)))
 
 (bind-func cim_chunk_note_onset
   (lambda (chunk:CIMChunk* idx)
@@ -280,43 +308,43 @@
     (if (null? chunk)
         (printout "<CHUNK: NULL>")
         (begin
-          (printout "<CHUNK: valid: " (cim_chunk_valid chunk) " onset: " (cim_note_onset (cim_chunk_start chunk)))
-          (printout "\nstart: " (cim_chunk_start chunk))
-          (printout "\nend  : " (cim_chunk_end chunk))
-          (printout "\nsize : " (cim_chunk_size chunk))          
-          (printout "\nonset : " (cim_chunk_onset chunk))
-          (printout "\nbpm  : " (cim_chunk_bpm chunk))
-          (printout "\ndur  : " (cim_chunk_duration chunk) ">")))
+          (printout "<CHUNK: valid: " (cim_chunk_valid chunk)) ;; " onset: " (cim_note_onset (cim_chunk_start chunk)))
+          (printout "\nstart  : " (cim_note_onset (cim_chunk_start chunk)))
+          (printout "\nend    : " (cim_note_onset (cim_chunk_end chunk)))
+          (printout "\nnotes  : " (cim_chunk_size chunk))          
+          (printout "\nonset  : " (cim_chunk_onset chunk))
+          (printout "\nbpm    : " (cim_chunk_bpm chunk))
+          (printout "\nhomo   : " (dtoi64 (* 100. (cim_chunk_homophonic chunk))) " %")
+          (printout "\ndur    : " (cim_chunk_duration chunk) ">")))
     void))
 
 (bind-poly print CIMChunk_print)
 
+;; where idx is note index to start searching from
 (bind-func find_chunk_a
   (let ((chunk:CIMChunk* (alloc)))
-    (lambda (chunk_num:i64 gapsize)
+    (lambda (chunk_num:i64 gapsize startidx:i64 endidx:i64)
       (tset! chunk 0 #f)
-      (let ((idx 0)
-            (gap 0.0)
-            (duration 0.0)
-            (startnote (retrieve_note idx))
+      (let ((duration 0.0)
+            (startnote (retrieve_note startidx))
             (bpm 120.0)
             (ptime 0.0)
             (finished #f)
-            (note (retrieve_note idx)))
+            (note (retrieve_note startidx)))
         (while (and (not (null? note)) (not finished))
           (if (> (- (cim_note_onset note) ptime) gapsize)
               (begin
                 (set! chunk_num (- chunk_num 1))
                 (if (= chunk_num 0)
                     (begin (set! finished #t)
-                           (set! idx (- idx 1))
+                           (set! startidx (- startidx 1))
                            void)
-                    (begin (set! idx (+ idx 0))
+                    (begin (set! startidx (+ startidx 0))
                            (set! startnote note)
                            void)))
-              (begin (set! idx (+ idx 1)) void))
+              (begin (set! startidx (+ startidx 1)) void))
           (set! ptime (+ (cim_note_onset note) (cim_note_duration note)))
-          (set! note (retrieve_note idx)))
+          (set! note (retrieve_note startidx)))
         (if (null? startnote)
             null
             (begin
@@ -326,24 +354,31 @@
                        (= chunk_num 1))
                   (begin
                     (set! finished #t)
-                    (set! note (last_note))
-                    (set! duration (- (+ (cim_note_onset note)
-                                         (cim_note_duration note))
-                                      (cim_note_onset startnote)))))
+                    (set! note (last_note))))
+              (if finished
+                  (set! duration (- (+ (cim_note_onset note)
+                                       (cim_note_duration note))
+                                    (cim_note_onset startnote))))
               (tfill! chunk finished
                       startnote
                       note
                       (+ 1 (- (cim_note_index note) (cim_note_index startnote)))
                       (cim_note_onset startnote)
-                      duration bpm)
+                      duration bpm 0.0)
+              (set_chunk_homophonic_percentage chunk)
               chunk))))))
 
 (bind-func find_chunk_b
   (lambda (chunk_num)
-    (find_chunk_a chunk_num 3.0)))
+    (find_chunk_a chunk_num 3.0 0 100000000)))
+
+(bind-func find_chunk_c
+  (lambda (chunk_num gap)
+    (find_chunk_a chunk_num gap 0 100000000)))
 
 (bind-poly find_chunk find_chunk_a)
 (bind-poly find_chunk find_chunk_b)
+(bind-poly find_chunk find_chunk_c)
 
 (bind-func num_chunks_a
   (lambda (gap)
@@ -354,18 +389,94 @@
         (set! chunk (find_chunk idx gap)))
       idx)))
 
-(bind-poly num_chunks num_chunks_a)
+(bind-func num_chunks_b
+  (lambda (gap startidx endidx)
+    (let ((idx 1)
+          (chunk (find_chunk idx gap startidx endidx)))
+      (while (cim_chunk_valid chunk)
+        (set! idx (+ idx 1))
+        (set! chunk (find_chunk idx gap)))
+      idx)))
 
-(bind-func find_random_chunk
-  (lambda (gap)
-    (let ((num (i64tod (num_chunks_a gap)))
-          (cnt 10)
-          (chunk (find_chunk (dtoi64 (* num (random))) gap)))
-      (while (and (< (cim_chunk_size chunk) 1)
+(bind-poly num_chunks num_chunks_a)
+(bind-poly num_chunks num_chunks_b)
+
+;; a is the lowest index to search from
+;; b is the highest index to search too
+;;
+;; both a and b may be negative meaning index from the end
+;; (one trick though is that 0 is start for 'a' and end for 'b')
+;;
+;; where c is a % of homophonic'ness to look for
+;; if c is positive then must be above (abs c) as a %
+;; if c is negative then must be below (abs c) as a %
+;;
+;; d1 is lower bound in beats
+;; d2 is the upper bound in beats
+(bind-func find_random_chunk_a
+  (lambda (gap c a b d1 d2)
+    (let ((num (num_chunks_a gap))
+          (low (i64tod (if (< a 0) (+ num a) a)))
+          (high (i64tod (if (> b 0) b (+ num b))))
+          (size (if (< high low) 1.0 (- high low)))
+          (cnt:i64 20)
+          (chunk (find_chunk (dtoi64 (+ low (* size (random)))) gap)))
+      (if (> low (i64tod num)) (set! low 0.0))
+      (while (and (or (< (cim_chunk_size chunk) 1)
+                      (if (< c 0.0)
+                          (> (cim_chunk_homophonic chunk) (* -1.0 c))
+                          (< (cim_chunk_homophonic chunk) c))
+                      (< (* (cim_chunk_duration chunk)
+                            (/ (cim_chunk_bpm chunk) 60.0))
+                         d1)
+                      (> (* (cim_chunk_duration chunk)
+                            (/ (cim_chunk_bpm chunk) 60.0))
+                         d2))
                   (> cnt 0))
+        (set! chunk null)
         (set! cnt (- cnt 1))
-        (set! chunk (find_chunk (dtoi64 (* 10.0 (random))) gap)))
-      chunk)))
+        (set! chunk (find_chunk (dtoi64 (+ low (* size (random)))) gap)))
+      (println "cnt:" cnt)
+      (if (or (< (cim_chunk_size chunk) 1)
+              (if (< c 0.0)
+                  (> (cim_chunk_homophonic chunk) (* -1.0 c))
+                  (< (cim_chunk_homophonic chunk) c))
+              (< (* (cim_chunk_duration chunk)
+                    (/ (cim_chunk_bpm chunk) 60.0))
+                 d1)
+              (> (* (cim_chunk_duration chunk)
+                    (/ (cim_chunk_bpm chunk) 60.0))
+                 d2))
+          null       
+          chunk))))
+
+(bind-func find_random_chunk_b
+  (lambda (gap homophonic d1 d2 history)
+    (find_random_chunk_a gap homophonic history 0 d1 d2)))
+
+(bind-func find_random_chunk_c
+  (lambda (gap homophonic d1 d2)
+    (find_random_chunk_a gap homophonic 0 0 d1 d2)))
+
+(bind-func find_random_chunk_d
+  (lambda (gap homophonic history)
+    (find_random_chunk_a gap homophonic history 0 0.0 100000.0)))
+
+(bind-func find_random_chunk_e
+  (lambda (gap homophonic)
+    (find_random_chunk_a gap homophonic 0 0 0.0 100000.0)))
+
+(bind-func find_random_chunk_f
+  (lambda (gap)
+    (find_random_chunk_a gap 0.0 0 0 0.0 100000.0)))
+
+(bind-poly find_random_chunk find_random_chunk_a)
+(bind-poly find_random_chunk find_random_chunk_b)
+(bind-poly find_random_chunk find_random_chunk_c)
+(bind-poly find_random_chunk find_random_chunk_d)
+(bind-poly find_random_chunk find_random_chunk_e)
+(bind-poly find_random_chunk find_random_chunk_f)
+
 
 (bind-func dump_chunks_a
   (lambda (gap)
@@ -1240,9 +1351,11 @@
       ;; if inter-offset less than 1/4 beat at current BPM
       ;; then just add to the mass of the current slice
       (if (< (- this_onset previous_onset) (* 0.25 (/ 60.0 (i64tod bpm))))
-          (begin (cim_tslice_mass_append (cim_tslice_last) (cim_note_volume note))
+          (begin (cim_tslice_mass_append (cim_tslice_last)
+                                         (cim_note_volume note))
                  void)
-          (begin (cim_tslice_add_onset time this_onset -1.0 bpm (cim_note_volume note))
+          (begin (cim_tslice_add_onset time this_onset
+                                       -1.0 bpm (cim_note_volume note))
                  void))          
       (cim_tslice_last))))
 
@@ -1257,8 +1370,6 @@
 (bind-func get_phase_time
   (lambda ()
     PhaseTime))
-
-
 
 ;;  FIX ME !!!!!!!!!!!!!!!
 ;;  need to fix cases of err, 1/2 and 1/4 being (2 * 1) > 0
@@ -1324,6 +1435,81 @@
                  (aset! bucket 0 4)))
       void)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Basic density analysis
+;;
+
+(bind-func density_analysis
+  (let ((times:|80,i64|* (alloc))
+        (pos:i64 0)
+        (cnt 1) (i 0)
+        (history 0)
+        (lasttime 0)
+        (density:double 0.5))
+    (lambda (time:i64 time_window:i64)
+      (set! lasttime time)
+      (aset! times pos time)
+      (set! history (- time time_window))
+      (set! cnt 0)
+      (dotimes (i 80)
+        (if (> (aref times i) history)
+            (set! cnt (+ cnt 1))))
+      (set! density (/ (i64tod cnt) 80.0))
+      (set! pos (+ pos 1))
+      (if (= pos 80) (set! pos 0))
+      void)))
+
+(bind-func current_density
+  (lambda ()
+    (let ((val:double (density_analysis.density))
+          (t:i64 (density_analysis.lasttime)))
+      (if (> (- (now) t) SR)
+          0.0
+          val))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Currently active notes and PCS
+;;
+
+(bind-func current_pcs
+  (let ((cnt 0) (i 0)
+        (pcs:i64* (alloc 12)))
+    (lambda ()
+      (dotimes (i 12) (pset! pcs i 0))
+      (dotimes (i 127)
+        (if (> (aref CIMNoteDurResolver i) -1)
+            (pset! pcs (% i 12) 1)))
+      pcs)))
+
+(define current-pcs
+  (lambda ()
+    (let ((pcs_cptr (current_pcs)))
+      (map (lambda (i)
+             (cptr:get-i64 pcs_cptr (* i 8)))
+           (range 0 12)))))
+
+(bind-func current_pitch_range_low
+  (let ((low 0) (i 0))
+    (lambda ()
+      (set! low 127)
+      (dotimes (i 127)
+        (if (and (> (aref CIMNoteDurResolver i) -1)
+                 (< i low))
+            (set! low i)))
+      low)))
+
+(bind-func current_pitch_range_high
+  (let ((high 127) (i 0))
+    (lambda ()
+      (set! high 0)
+      (dotimes (i 127)
+        (if (and (> (aref CIMNoteDurResolver i) -1)
+                 (> i high))
+            (set! high i)))
+      high)))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -1337,6 +1523,7 @@
           (bpm_analysis note)
           (pulse_analysis time)
           (key_analysis note)
+          (density_analysis time (dtoi64 (* 2.0 SRd)))
           void))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1366,7 +1553,7 @@
                 (t2 (dtoi64 (* SRd (- (clock_clock) (audio_clock_base)))))
                 (t t2))
             ;; (println t1 t2 (- t1 t2))            
-            ;; (println "midi-in" type chan a b)            
+            (println "midi-in" type chan a b)            
             (record_midi_msg t type (convert chan) (convert a) (convert b))
             (set! idx (record_note t type (convert chan) (convert a) (convert b)))
             (set! note (retrieve_note idx))

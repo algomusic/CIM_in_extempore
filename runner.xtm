@@ -55,14 +55,21 @@
 
 (define total-beat 0)
 
-(define *current-key* 0)
+(define *key* 0)
+(define *density* 0)
+(define *low* 127)
+(define *high* 0)
+(define *pcs* '())
 
 (define play-chunk
   (lambda (beat inst gap)
-    (let* ((chunk (find_random_chunk gap)) ;;(find_chunk_a idx gap))
+    ;; gap homophonic start end d1 d2
+    ;; so defaults to accept everything in find_random (with 1.5s gap)
+    ;; (find_random_chunk_a 1.5 0.0 0 0 0.0 10000.0)
+    (let* ((chunk (find_random_chunk_a gap 0.0 0 0 0.0 1000.0))
            (size (cim_chunk_size chunk))
-           (maj? (if (< *current-key* 0) #f #t))
-           (key (if maj? *current-key* (modulo (* *current-key* -1) 12)))
+           (maj? (if (< *key* 0) #f #t))
+           (key (if maj? *key* (modulo (* *key* -1) 12)))
            (scale (pc:scale key (if maj? 'ionian 'aeolian))))
       (CIMChunk_print chunk)
       (println)
@@ -80,13 +87,17 @@
 (define test
   (let ((cnt 0))
     (lambda (beat dur)
+      (println "pcs: " *pcs*
+               " low: " *low*
+               " high: " *high*
+               "density:" *density*)
       (set! cnt (+ cnt 1))
       (set! total-beat beat)
-      (let* ((maj? (if (< *current-key* 0) #f #t))
-             (key (if maj? *current-key* (modulo (* *current-key* -1) 12))))
-        (playob 0 1 fmsynth (+ key 48) 70 (* .4 dur) 1.0 0.5)
-        (playob 0 1 fmsynth (+ key 60) 50 (* .3 dur) 1.0 0.5)
-        (if (= 0 (modulo beat 8))
+      (let* ((maj? (if (< *key* 0) #f #t))
+             (key (if maj? *key* (modulo (* *key* -1) 12))))
+        ;; (playob 0 1 fmsynth (+ key 48) 70 (* .4 dur) 1.0 0.5)
+        ;; (playob 0 1 fmsynth (+ key 60) 50 (* .3 dur) 1.0 0.5)
+        (if (= 0 (modulo beat 4)) 
             (play-chunk beat fmsynth 1.5))
         (callback (*metro* (+ beat (* .5 dur))) 'test (+ beat dur) dur)))))
 
@@ -99,7 +110,11 @@
 (define analysis-loop
   (let ((lasttime 0))
     (lambda (beat dur)
-      (set! *current-key* (current_key))
+      (set! *key* (current_key))
+      (set! *pcs* (current-pcs))
+      (set! *low* (current_pitch_range_low))
+      (set! *high* (current_pitch_range_high))
+      (set! *density* (current_density))
       (if (<> lasttime (get_phase_time))
           (begin
             (set! lasttime (get_phase_time))
@@ -118,4 +133,4 @@
     (note_buffer_reset)
     (midi_msg_buffer_reset)))
 
-;; (reset_buffers)
+(reset_buffers)
