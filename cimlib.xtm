@@ -281,7 +281,8 @@
 
 (bind-func cim_chunk_start_index
   (lambda (chunk:CIMChunk*)
-    (cim_note_index (tref chunk 1))))
+    (if (null? chunk) 0
+      (cim_note_index (tref chunk 1)))))
 
 (bind-func cim_chunk_end_index
   (lambda (chunk:CIMChunk*)
@@ -540,7 +541,7 @@
         (set! chunk null)
         (set! cnt (- cnt 1))
         (set! chunk (find_chunk (dtoi64 (* (i64tod num) (random)))) gap startidx endidx))
-      (println "cnt:" cnt)
+      ;(println "cnt:" cnt)
       (if (or (< (cim_chunk_size chunk) 1)
               (if (< homophonic 0.0)
                   (> (cim_chunk_homophonic chunk) (* -1.0 homophonic))
