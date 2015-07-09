@@ -28,7 +28,7 @@
 
 (bind-val CIM_GLOBAL_BPM double 120.0)
 (bind-val CIM_GLOBAL_BPM_CONFIDENCE i64 0)
-(bind-val CIM_GLOBAL_BPM_CONFIDENCE_WEIGHT i64 8)
+(bind-val CIM_GLOBAL_BPM_CONFIDENCE_WEIGHT i64 18)
 
 (bind-func current_bpm_confidence
   (lambda ()
@@ -42,14 +42,15 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(bind-val CIM_PEDAL_ONE i64 0)
-(bind-val CIM_PEDAL_TWO i64 0)
+(bind-val CIM_PEDALS |10,i64|)
 
-(bind-func cim_pedal
-  (lambda (x:i64)
-    (if (= x 1)
-        CIM_PEDAL_ONE
-        CIM_PEDAL_TWO)))
+(bind-func cim_get_pedal
+  (lambda (i:i64)
+    (aref CIM_PEDALS i)))
+
+(bind-func cim_set_pedal
+  (lambda (i:i64 x:i64)
+    (aset! CIM_PEDALS i x)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -59,14 +60,17 @@
 
 ;;  root (as pc) and major/minor #t/#f
 (bind-type CIMKey <i64,i1>)
+(bind-val CIM_GLOBAL_KEY CIMKey)
 
 (bind-func cim_key_root
   (lambda (key:CIMKey*)
-    (tref key 0)))
+    (if (null? key) -1
+        (tref key 0))))
 
 (bind-func cim_key_major
   (lambda (key:CIMKey*)
-    (tref key 1)))
+    (if (null? key) 0
+        (tref key 1))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -317,7 +321,8 @@
 
 (bind-func cim_chunk_key
   (lambda (chunk:CIMChunk*)
-    (cim_note_key (cim_chunk_start chunk))))
+    (if (null? chunk) null
+        (cim_note_key (cim_chunk_start chunk)))))
 
 ;; percentage of overlapping notes 
 (bind-func set_chunk_homophonic_percentage
@@ -353,6 +358,15 @@
       (* (- (cim_note_onset note) onset) (/ chunkbpm 60.0)))))
 
 (bind-func cim_chunk_note_beats
+  (lambda (chunk:CIMChunk* idx)
+    (set! idx (% idx (cim_chunk_size chunk)))    
+    (let ((snote (cim_chunk_start chunk))
+          (sidx (cim_note_index snote))
+          (chunkbpm (cim_chunk_bpm chunk))
+          (note (retrieve_note (+ sidx idx))))
+      (rtod (cim_note_beats note)))))
+
+(bind-func cim_chunk_note_duration
   (lambda (chunk:CIMChunk* idx)
     (set! idx (% idx (cim_chunk_size chunk)))    
     (let ((snote (cim_chunk_start chunk))
@@ -396,14 +410,14 @@
           (printout "\nnotes  : " (cim_chunk_size chunk))          
           (printout "\nonset  : " (cim_chunk_onset chunk))
           (printout "\nbpm    : " (cim_chunk_bpm chunk))
-          (printout "\nkey    : " (cim_chunk_key chunk))
+          (printout "\nkey    : " (cim_key_root (cim_chunk_key chunk)) " maj? " (cim_key_major (cim_chunk_key chunk)))   
           (printout "\nhomo   : " (dtoi64 (* 100. (cim_chunk_homophonic chunk))) " %")
           (printout "\ndur    : " (cim_chunk_duration chunk) ">")))
     void))
 
 (bind-poly print CIMChunk_print)
 
-(bind-val CIMDefaultGapSize double 1.5)
+(bind-val CIMDefaultGapSize double 3.0)
 
 ;; where startidx is note index to start searching from
 ;; and endidx is the number of notes to check over
@@ -634,7 +648,8 @@
     (if (and (= type MIDI_CC) (<> a 64)) -1  ;; sustain pedal
         (let ((note (retrieve_note (aref CIMNoteDurResolver (i8toi64 a)))))
           (if (and (not (null? note))
-                   (<> type MIDI_CC))
+                   (<> type MIDI_CC)
+                   (<> type MIDI_NOTE_ON))
               (let ((bpm (cim_note_bpm note))
                     (dur (- (/ (i64tod (- time CIMNoteBufferStartTimeI)) (ftod SRf))
                             (cim_note_onset note)))
@@ -651,6 +666,9 @@
                           (/ (i64tod (- time CIMNoteBufferStartTimeI)) (ftod SRf))
                           0.0 (i8toi64 (if (= type MIDI_CC) (* -1 a) a)) (i8toi64 b)
                           1/1 CIM_GLOBAL_BPM)
+                  (cim_note_key_set note
+                                    (cim_key_root CIM_GLOBAL_KEY)
+                                    (cim_key_major CIM_GLOBAL_KEY))
                   (aset! CIMNoteDurResolver (i8toi64 a) CIMNoteBufferIdx)
                   (set! CIMNoteBufferIdx (+ CIMNoteBufferIdx 1))
                   (- CIMNoteBufferIdx 1)))
@@ -1039,8 +1057,10 @@
             (set! CIM_GLOBAL_BPM_CONFIDENCE (+ 1 CIM_GLOBAL_BPM_CONFIDENCE))
             void))          
       (if (and (>= CIM_GLOBAL_BPM_CONFIDENCE CIM_GLOBAL_BPM_CONFIDENCE_WEIGHT)
-               (= CIM_PEDAL_TWO 0))
-          (set! CIM_GLOBAL_BPM current_bpm))
+               (= (cim_get_pedal 2) 0))
+          (begin
+            ;; (println "updating global metro " CIM_GLOBAL_BPM " ... ")
+            (set! CIM_GLOBAL_BPM current_bpm)))
       (dtoi64 CIM_GLOBAL_BPM))))
 
 (bind-func bpm_analysis
@@ -1315,6 +1335,8 @@
       (println "")
       void)))
 
+(bind-val *KEY* i64 0)
+
 ;; negative numbers for minor
 ;; positive numbers for major
 ;; -12 for C minor
@@ -1324,12 +1346,12 @@
           (majmin:i1 (key_analysis.majmin))
           (pcs:|12,i1|* (key_analysis.pitchset))
           (i 0))
+      (tfill! CIM_GLOBAL_KEY root majmin)
       (if majmin
           root
           (if (= root 0) -12
               (* -1 root))))))
 
-;; phase anslysis
 
 ;; idx, time, phase, bpm, mass (total volume)
 (bind-type CIMTimeSlice <i64,i64,double,double,i64,i64>)
@@ -1504,6 +1526,7 @@
 
 (bind-func set_phase_time
   (lambda (t)
+    (println "Adjusting Phase Time")
     (set! PhaseTime t)))
 
 (bind-func get_phase_time
@@ -1515,8 +1538,10 @@
 ;;  i.e. need to fix cases where 1/2,1/4,err get 1 value
 ;;  before 1/1 even gets started!
 (bind-func pulse_analysis
-  (let ((bpm 0)
+  (let ((bpm (dtoi64 CIM_GLOBAL_BPM))
         (err 0.0)
+        (incerr 0)
+        (errmax 10)
         (i 0)
         (bucket:|4,i64|* (alloc)))
     (lambda (time)
@@ -1525,10 +1550,10 @@
       ;;   (printout (aref bucket i) ","))
       ;; (println)
       (if (<> (current_bpm) bpm)
-          (begin (println "BPM CHANGE" (current_bpm) bpm)
-                 (set! bpm (current_bpm))
-                 (set_phase_time time)
-                 (dotimes (i 4) (aset! bucket i 0))))
+          (begin ;; (println "BPM CHANGE" (current_bpm) bpm)
+            (set! bpm (current_bpm))
+            (set_phase_time time)
+            (dotimes (i 4) (aset! bucket i 0))))
       (set! err (% (/ (/ (i64tod (- time PhaseTime)) SRd) (/ 60.0 (i64tod bpm))) 1.0))
       (cond ((or (< err 0.2)
                  (> err 0.8))
@@ -1543,7 +1568,11 @@
                    ;; (println "1/2 NOTE CHANGE")
                    (dotimes (i 4) (aset! bucket i 0))
                    (aset! bucket 0 2)
-                   (if (= 0 CIM_PEDAL_TWO) (set! PhaseTime time))
+                   (if (and (= 0 (cim_get_pedal 2))
+                            (> incerr errmax))
+                       (begin
+                         (set! incerr 0)
+                         (set_phase_time time)))
                    void))
              void)
             ((or (and (> err 0.2)
@@ -1557,7 +1586,11 @@
                    ;; (println "1/4 NOTE CHANGE")
                    (dotimes (i 4) (aset! bucket i 0))
                    (aset! bucket 0 2)
-                   (if (= 0 CIM_PEDAL_TWO) (set! PhaseTime time))
+                   (if (and (= 0 (cim_get_pedal 2))
+                            (> incerr errmax))                               
+                       (begin
+                         (set! incerr 0)
+                         (set_phase_time time)))
                    void))
              void)
             (else
@@ -1567,7 +1600,11 @@
                  (begin (dotimes (i 4) (aset! bucket i 0))
                         ;; (println "ERR CHANGE")
                         (aset! bucket 0 1)
-                        (if (= 0 CIM_PEDAL_TWO) (set! PhaseTime time))
+                        (if (and (= 0 (cim_get_pedal 2))
+                                 (> incerr errmax))
+                            (begin
+                              (set! incerr 0)
+                              (set_phase_time time)))
                         void))
              void))
       ;; might not need this but ...
@@ -1655,6 +1692,7 @@
 (bind-func current_polyphony_cnt
   (let ((cnt 0) (i 0))
     (lambda ()
+      (set! cnt 0)
       (dotimes (i 127)
         (if (> (aref CIMNoteDurResolver i) -1)
             (set! cnt (+ cnt 1))))
@@ -1683,6 +1721,11 @@
 ;;
 
 (bind-val CIM_LOAD_TIME double 0.0)
+(bind-val CIM_PRINT_MIDI_MESSAGES i1 0)
+
+(bind-func cim_print_midi_messages
+  (lambda (x)
+    (set! CIM_PRINT_MIDI_MESSAGES x)))
 
 (bind-func set_lib_load_time
   (lambda ()
@@ -1704,27 +1747,39 @@
                 (t2 (dtoi64 (* SRd (- (clock_clock) (audio_clock_base)))))
                 (t t2))
             ;; (println t1 t2 (- t1 t2))            
-            ;; (println "midi-in" type chan a b)            
+            (if CIM_PRINT_MIDI_MESSAGES (println "midi-in" type chan a b))
             (record_midi_msg t type (convert chan) (convert a) (convert b))
             (if (and (or (= type MIDI_NOTE_ON) (= type MIDI_NOTE_OFF))
-                     (= CIM_PEDAL_ONE 0))
+                     (= (cim_get_pedal 2) 0))
                 (begin
                   (set! idx (record_note t type (convert chan) (convert a) (convert b)))
                   (set! note (retrieve_note idx))
-                  (analysis t note)))
+                  (analysis t note)
+                  (if (and (> idx -1) (> (cim_get_pedal 1) 0))
+                      (begin
+                        (set! CIMNoteBufferIdx (- CIMNoteBufferIdx 1))))))
             (if (= type MIDI_CC)
-                (cond ((or (= a 64:i8)
-                           (= a 66:i8)
-                           (= a 67:i8))
-                       (record_note t type (convert chan) (convert a) (convert b))
+                (cond ((= a 64:i8)
+                       (if (and (= (cim_get_pedal 1) 0)
+                                (= (cim_get_pedal 2) 0))
+                           (record_note t type (convert chan) (convert a) (convert b)))
+                       void)
+                      ((= a 66:i8)
+                       (cim_set_pedal 4 (i8toi64 b))
+                       void)
+                      ((= a 67:i8)
+                       (cim_set_pedal 5 (i8toi64 b))
                        void)
                       ((= a 68:i8)
-                       (set! CIM_PEDAL_ONE (i8toi64 b))
+                       (cim_set_pedal 1 (i8toi64 b))
                        void)
                       ((= a 69:i8)
-                       (set! CIM_PEDAL_TWO (i8toi64 b))
+                       (cim_set_pedal 2 (i8toi64 b))
                        void)
-                      (else ;; nothing
+                      ((= a 21:i8)
+                       (cim_set_pedal 3 (i8toi64 b))
+                       void)
+                      (else ;; nothing,
                        void)))
             ;;(record_tslice t note)
             void)
@@ -1733,6 +1788,7 @@
 ;; utilities
 (define panic
   (lambda (device)
+    (midi_send device *midi-cc* 0 64 0)
   	(dotimes (c 16)
   		(dotimes (i 127)
     		(midi_send device 8 c i 0)))))
