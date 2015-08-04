@@ -417,7 +417,7 @@
 
 (bind-poly print CIMChunk_print)
 
-(bind-val CIMDefaultGapSize double 3.0)
+(bind-val CIMDefaultGapSize double 2.0)
 
 ;; where startidx is note index to start searching from
 ;; and endidx is the number of notes to check over

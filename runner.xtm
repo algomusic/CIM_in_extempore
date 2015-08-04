@@ -16,7 +16,7 @@
 
 (println "MIDI out port is" midi-out-port "MIDI in port is" midi-in-port)
 
-(sys:load "../CIM_in_extempore/cimlib.xtm")
+(sys:load "../../CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/core/pc_ivl.xtm")
 ;; init MIDI stuff
 
@@ -66,7 +66,10 @@
 
 (define transform-pitches
   (lambda (lst)
-    (set! pitch-list (map (lambda (i) (if (>= i 0) (+ i (random -4 4))) i) lst))))
+    ;(println (current_pitch_range_low) (current_pitch_range_high)
+    (set! pitch-list (map (lambda (i) (if (>= i 0) (+ i (random -1 2)) i)) lst)))) ;; contour spread
+    ;(set! pitch-list (map (lambda (i) (if (>= i 0) (random 20 100) i)) lst)))) ;; randomise pitches
+    ;(set! pitch-list (map (lambda (i) i) lst)))) ;; no change
 
 ;(transform-pitches)
 
@@ -142,7 +145,9 @@
           (dotimes (i size)
             (if (and (< (real->integer (list-ref pitch-list i)) 0) note-not-played?)
               (begin 
-                (play-midi-cc (now) *midi-out* (* -1 (list-ref pitch-list i)) (cim_chunk_note_volume chunk i) 0))
+                (play-midi-cc (now) *midi-out* (* -1 (list-ref pitch-list i)) 
+                  (+ (random -10 10) (cim_chunk_note_volume chunk i)) ;; vary dynamics a bit - match perf?
+                   0))
               (if (>= (real->integer (list-ref pitch-list i)) 0) ;; manage contoller data (negative data a values)
                 (begin 
                   (if note-not-played? (set! last-onset (* -1 (cim_chunk_note_onset chunk i))))
@@ -172,6 +177,8 @@
                   ))))))))
 
 
+;; density (cim_get_pedal 3)
+
 (define test
   (let ((cnt 0) (allowreset #t))
     (lambda (beat dur)
@@ -179,7 +186,7 @@
       (set! total-beat beat)
       (let* ((maj? (if (< *key* 0) #f #t))
              (key (if maj? *key* (modulo (* *key* -1) 12)))
-             (density_controller (- 4 (real->integer (/ (cim_get_pedal 3) 30.0)))))
+             (density_controller (- 4 (real->integer (/ (cim_get_pedal 3) 30.0))))) ; value from 0-5 (at present)
         (if (and (> (cim_get_pedal 4) 80)
                  allowreset)
             (begin
@@ -197,12 +204,13 @@
         ;; (playob 0 1 fmsynth (+ key 72) 70 (* .4 dur) 1.0 0.5)
         ;; (playob 0 1 fmsynth (+ key 84) 50 (* .1 dur) 1.0 0.5)
         ;; (hplay (- 0 0.1) *midi-out* 96 40 0.1)
-        (if (> (cim_get_pedal 3) 0)
+        ;;(println "test")
+        (if (> (cim_get_pedal 3) 0) ;;  check for density controller set to 'off'
             (if (= 0 (modulo beat (list-ref '(1 2 4 8 16) density_controller)))
                 (play-chunk beat *midi-out* 3.0 (list-ref '(1 2 4 8 16) density_controller))))
         (callback (*metro* (+ beat (* .125 dur))) 'test (+ beat dur) dur)))))
 
-(test (*metro* 'get-beat 4) 1)
+(test (*metro* 'get-beat 4) 1) ;; starts playback loop
 
 (define update-metro
   (lambda (bpm time beats)
@@ -236,7 +244,7 @@
               (<> lastbpm *bpm*))
           (begin
             (set! lasttime (get_phase_time))
-            ;(play-note (now) fmsynth 96 90 3000)
+            ;(play-note (now) fmsynth 96 90 3000) ;; audible metronome from computer
             (println "CHANGE METRO!" lasttime)
             (callback (+ lasttime (* *samplerate* (/ 60.0 *bpm*)))
                       'update-metro (current_bpm)
