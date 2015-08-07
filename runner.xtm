@@ -83,11 +83,6 @@
     ;(set! pitch-list (map (lambda (i) (if (>= i 0) (random 20 100) i)) lst)))) ;; randomise pitches
     ;(set! pitch-list (map (lambda (i) i) lst)))) ;; no change
 
-;(transform-pitches)
-(current_pitch_range_high)
-(current_pitch_range_low)
-(list-ref pitch-list 0)
-
 
 (define get-pitches-from-chunk
   (lambda (chnk)
@@ -202,7 +197,6 @@
       (set! cnt (+ cnt 1))
       (set! total-beat beat)
       (let* ((maj? (if (< *key* 0) #f #t))
-<<<<<<< Updated upstream
              (key (if maj? *key* (modulo (* *key* -1) 12)))
              (density_controller (- 4 (real->integer (/ (cim_get_pedal 3) 30.0))))) ; value from 0-4 (at present)
         (if (and (> (cim_get_pedal 4) 80)
@@ -227,14 +221,6 @@
             (if (= 0 (modulo beat (list-ref '(1 2 4 8 16) density_controller)))
                 (play-chunk beat *midi-out* 3.0 (list-ref '(1 2 4 8 16) density_controller))))
         (callback (*metro* (+ beat (* .125 dur))) 'test (+ beat dur) dur)))))
-=======
-             (key (if maj? *key* (modulo (* *key* -1) 12))))
-         (playob 0 1 fmsynth (+ key 48) 70 (* .4 dur) 1.0 0.5)
-         (playob 0 1 fmsynth (+ key 60) 50 (* .3 dur) 1.0 0.5)
-        ;(if (= 0 (modulo beat 4)) 
-        ;    (play-chunk beat fmsynth 1.5))
-        (callback (*metro* (+ beat (* .5 dur))) 'test (+ beat dur) dur)))))
->>>>>>> Stashed changes
 
 (test (*metro* 'get-beat 4) 1) ;; starts playback loop
 
