@@ -67,11 +67,27 @@
 (define transform-pitches
   (lambda (lst)
     ;(println (current_pitch_range_low) (current_pitch_range_high)
-    (set! pitch-list (map (lambda (i) (if (>= i 0) (+ i (random -1 2)) i)) lst)))) ;; contour spread
+      ;; add some small random transposition to afford phrase seqence outcomes.
+    (if (< (random) .2)
+      (let ((t (random '(2 4 5 7 -3 -5))))
+        (set! lst (ivl:transpose t lst))))
+    ;; try to move out of range of human
+    (if (and (> (list-ref lst 0) (current_pitch_range_low))
+             (< (list-ref lst 0) (current_pitch_range_high)))
+      (if (> (list-ref lst 0) (/ (+ (current_pitch_range_low) (current_pitch_range_high)) 2))
+        (set! lst (ivl:transpose 12 lst))
+        (set! lst (ivl:transpose -12 lst))))
+    (if (< (random) .2) (set! lst (ivl:invert lst)))
+    (set! pitch-list (map (lambda (i) (if (>= i 0) (+ i (random -1 2)) i)) lst))))
+    ;; contour spread
     ;(set! pitch-list (map (lambda (i) (if (>= i 0) (random 20 100) i)) lst)))) ;; randomise pitches
     ;(set! pitch-list (map (lambda (i) i) lst)))) ;; no change
 
 ;(transform-pitches)
+(current_pitch_range_high)
+(current_pitch_range_low)
+(list-ref pitch-list 0)
+
 
 (define get-pitches-from-chunk
   (lambda (chnk)
@@ -109,7 +125,8 @@
 
 (define play-midi-cc
   (lambda (time device cc val channel)
-    (callback (real->integer time) 'midi_send device *midi-cc* (real->integer channel) (real->integer cc) (real->integer val))))
+    (callback (real->integer time) 'midi_send device *midi-cc* 
+      (real->integer channel) (real->integer cc) (real->integer val))))
 
 (bind-func print_chunk_notes
   (lambda (index:i64 size:i64)
@@ -146,7 +163,7 @@
             (if (and (< (real->integer (list-ref pitch-list i)) 0) note-not-played?)
               (begin 
                 (play-midi-cc (now) *midi-out* (* -1 (list-ref pitch-list i)) 
-                  (+ (random -10 10) (cim_chunk_note_volume chunk i)) ;; vary dynamics a bit - match perf?
+                  (cim_chunk_note_volume chunk i)
                    0))
               (if (>= (real->integer (list-ref pitch-list i)) 0) ;; manage contoller data (negative data a values)
                 (begin 
@@ -168,7 +185,7 @@
                            (pc:quantize (real->integer (+ (- key ckey)
                                                           (list-ref pitch-list i)))
                                         scale)
-                           (cim_chunk_note_volume chunk i)
+                           (+ (cim_chunk_note_volume chunk i) (random -10 10)) ;; dynamic variation
                            (cim_chunk_note_duration chunk i))))
                 (begin
                   (if (> dcontrol 2)
@@ -177,7 +194,7 @@
                   ))))))))
 
 
-;; density (cim_get_pedal 3)
+;(cim_set_pedal 3 100); 0-127
 
 (define test
   (let ((cnt 0) (allowreset #t))
@@ -187,7 +204,7 @@
       (let* ((maj? (if (< *key* 0) #f #t))
 <<<<<<< Updated upstream
              (key (if maj? *key* (modulo (* *key* -1) 12)))
-             (density_controller (- 4 (real->integer (/ (cim_get_pedal 3) 30.0))))) ; value from 0-5 (at present)
+             (density_controller (- 4 (real->integer (/ (cim_get_pedal 3) 30.0))))) ; value from 0-4 (at present)
         (if (and (> (cim_get_pedal 4) 80)
                  allowreset)
             (begin
@@ -205,7 +222,7 @@
         ;; (playob 0 1 fmsynth (+ key 72) 70 (* .4 dur) 1.0 0.5)
         ;; (playob 0 1 fmsynth (+ key 84) 50 (* .1 dur) 1.0 0.5)
         ;; (hplay (- 0 0.1) *midi-out* 96 40 0.1)
-        ;;(println "test")
+        ;(println "test" density_controller)
         (if (> (cim_get_pedal 3) 0) ;;  check for density controller set to 'off'
             (if (= 0 (modulo beat (list-ref '(1 2 4 8 16) density_controller)))
                 (play-chunk beat *midi-out* 3.0 (list-ref '(1 2 4 8 16) density_controller))))
