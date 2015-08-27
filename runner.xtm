@@ -1,3 +1,368 @@
+;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; osc stuff
+;;
+;;;;;;;;;;;;;;;;;;;;;;
+
+(define *osc:on* #t)
+
+(if *osc:on* (io:osc:start-server 9000 "osc-receive-9000"))
+
+;; define a sending address
+(define addy1 (cons "169.254.52.46" 9000))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; init midi stuff
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define midi-out-port 
+  (if (string=? "" (sys:cmdarg "midi-out"))
+      0
+      (string->number (sys:cmdarg "midi-out"))))
+
+(define midi-in-port 
+  (if (string=? "" (sys:cmdarg "midi-in"))
+      0
+      (string->number (sys:cmdarg "midi-in"))))
+
+(println "MIDI out port is" midi-out-port "MIDI in port is" midi-in-port)
+
+(sys:load "../CIM_in_extempore/cimlib.xtm")
+(sys:load "libs/core/pc_ivl.xtm")
+;; init MIDI stuff
+
+(define *midi-in* (midi_new_indevice))
+(define *midi-out* (midi_new_outdevice))
+
+;; query for valid midi output devices
+(midi_query_outports *midi-out*)
+(midi_open_outport *midi-out* midi-out-port)
+;; query for valid midi input
+(midi_query_inports *midi-in*)
+(midi_open_inport *midi-in* midi-in-port)
+
+;; register a *midi-in* to "midi_callback"
+(midi_register_device *midi-in* "midi_msg_buffer_receiver")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(sys:load "libs/external/instruments_ext.xtm")
+
+(bind-func dsp:DSP 1000000
+  (let ((t 0))
+    (lambda (in time chan dat)
+      (if (= t 0) (set! t time))
+      (if (< chan 2)
+          (+ (fmsynth in time chan dat)
+             0.0)
+          0.0))))
+
+(dsp:set! dsp)
+
+;;(fmsynth_fx.dfb .01)
+(fmsynth_fx.dfb .4)
+
+(define total-beat 0)
+
+(define *bpm* 120)
+(define *key* 0)
+(define *density* 0)
+(define *low* 127)
+(define *high* 0)
+(define *pcs* '())
+(define *polyphony* 0)
+
+;; pitch transformations
+(define pitch-list ())
+
+(define transform-pitches
+  (lambda (lst)
+    (set! pitch-list (map (lambda (i) (if (>= i 0) (+ i (random -4 4))) i) lst))))
+
+;(transform-pitches)
+
+(define get-pitches-from-chunk
+  (lambda (chnk)
+    (set! pitch-list
+          (make-list-with-proc (cim_chunk_size chnk)
+                               (lambda (i) (cim_chunk_note_pitch chnk i))))))
+
+
+;; homophonic playnote
+(define homo-play-midi-note
+  (let ((notes (make-vector 127 0)))
+    (lambda (time device pitch velocity duration channel)
+      (if (> time (now))
+          (if (and (> time (vector-ref notes pitch))
+                   (> duration 500.0))
+              (let ((dur (if (> duration (* 2. *second*)) (* 2. *second*) duration))) 
+                ;; (println 'dur: dur 'pitch: pitch)
+                (callback time 'midi_send device *midi-note-on* channel pitch velocity)
+                (callback (+ time dur) 'midi_send device *midi-note-off* channel pitch velocity))))
+      (vector-set! notes pitch (+ time duration)))))
+
+
+;; playback
+;; util - put in rtmidi-scm.xtm and push to git
+(define-macro (hplay . args)
+  (if (symbol? (car args))
+      `(homo-play-midi-note (*metro* beat) ,(car args)
+           (real->integer ,(cadr args))
+           (real->integer ,(caddr args))
+           (*metro* 'dur ,(car (cdddr args))) 0)
+      `(homo-play-midi-note (*metro* (+ beat ,(car args))) ,(cadr args)
+           (real->integer ,(caddr args))
+           (real->integer ,(car (cdddr args)))
+           (*metro* 'dur ,(cadr (cdddr args))) 0)))
+
+(define play-midi-cc
+  (lambda (time device cc val channel)
+    (callback (real->integer time) 'midi_send device *midi-cc* (real->integer channel) (real->integer cc) (real->integer val))))
+
+(bind-func print_chunk_notes
+  (lambda (index:i64 size:i64)
+    (doloop (i size)
+      (println (retrieve_note (+ i index))))))
+
+;; bugs full gas stops playback (i.e p3 > 120)
+;; latest phrase never available for playback.
+
+(define play-chunk  
+  (lambda (beat inst gap dcontrol)    
+    ;; gap homophonic start end d1 d2
+    ;; so defaults to accept everything in find_random (with 1.5s gap)
+    ;; (find_random_chunk_a 1.5 0.0 0 0 0.0 10000.0)
+    (let* (;(chunk (find_random_chunk_a gap (if (> *polyphony* 2) -10.0 0.0) 0 0 1.0 (* 2.0 dcontrol))) ;;1000.0))
+           (last_idx (cim_note_index (last_note)))
+           ;(lllll (println 'last_note_index: last_idx))
+           (num (num_chunks_b gap 0 0))
+           ;(lllllll (println 'num: num))
+           (chunk (find_random_chunk_a gap 0.0 0 0 0.0 (* 2. dcontrol)))
+           (chunkkey (cim_chunk_key chunk))
+           (cmaj? (if (= 1 (cim_key_major chunkkey)) #t #f))
+           (ckey (cim_key_root chunkkey))
+           (size (cim_chunk_size chunk))
+           (idx (cim_chunk_start_index chunk))
+           (last-onset 0.0)
+           (maj? (if (< *key* 0) #f #t))
+           (key (if maj? *key* (modulo (* *key* -1) 12)))
+           (scale (pc:scale key (if maj? 'ionian 'aeolian)))
+           (note-not-played? #t))
+      (if *osc:on*
+          (begin
+            (io:osc:send (*metro* beat) addy1 "/CIMdisplay/segs" (number->string num))
+            (io:osc:send (*metro* beat) addy1 "/CIMdisplay/tempoPBS" 1)
+            (io:osc:send (+ 5000 (*metro* beat)) addy1 "/CIMdisplay/tempoPBS" 0)))
+      ;; (println)
+      ;; (println 'diff: ckey cmaj? key maj?)
+      (println '-----------------------)
+      (CIMChunk_print chunk)
+      (println)
+      ;;(println 'scale: scale 'bpm: )
+      ;;(print_chunk_notes idx size)
+      
+      ;(transform-pitches (get-pitches-from-chunk chunk))
+      (get-pitches-from-chunk chunk)
+      ;;(println 'got-pitches)
+      (if (= (cim_chunk_valid chunk) 1)
+          (dotimes (i size)
+            (if (and (< (real->integer (list-ref pitch-list i)) 0) note-not-played?)
+              (begin 
+                (play-midi-cc (now) *midi-out* (* -1 (list-ref pitch-list i)) (cim_chunk_note_volume chunk i) 0))
+              (if (>= (real->integer (list-ref pitch-list i)) 0) ;; manage contoller data (negative data a values)
+                (begin 
+                  (if note-not-played? (set! last-onset (* -1 (cim_chunk_note_onset chunk i))))
+                  (set! note-not-played? #f)
+                  (let* ((os (cim_chunk_note_onset chunk i))
+                         (mm (modulo os 0.125))
+                         (mm2 (if (< mm .05) mm
+                                  (if (> mm .1) (- mm .125)
+                                      0.0))))
+                    ;; (println 'note: (cim_chunk_note_pitch chunk i)
+                    ;;          'beats: (cim_chunk_note_beats chunk i)
+                    ;;          'dur: (cim_chunk_note_duration chunk i))
+
+                    ;; (println 'onset: os mm (- os mm2) mm2)
+                    
+                    ;; (play (+ 0.0 last-onset (if (< os .11) os (- os mm2))) fmsynth
+                    ;;       ;(+ 12 (list-ref pitch-list i))
+                    ;;        (pc:quantize (real->integer (+ 12 (- key ckey)
+                    ;;                                      (list-ref pitch-list i)))
+                    ;;                     scale)                          
+                    ;;       (* 1.0 (cim_chunk_note_volume chunk i))
+                    ;;       (* .7 (cim_chunk_note_duration chunk i)) 1.0 0.5)
+                    (hplay (+ 0.0 last-onset (if (< os .11) os (- os mm2)))
+                           inst
+                           ;(list-ref pitch-list i)
+                           (pc:quantize (real->integer (+ (- key ckey)
+                                                         (list-ref pitch-list i)))
+                                        scale)
+                           (cim_chunk_note_volume chunk i)
+                           (cim_chunk_note_duration chunk i))))
+                (begin
+                  (if (> dcontrol 2)
+                      (play-midi-cc (*metro* (+ (cim_chunk_note_onset chunk i) beat last-onset)) 
+                                    *midi-out* (* -1 (list-ref pitch-list i)) (cim_chunk_note_volume chunk i) 0))
+                  ))))))))
+
+
+;; (define test)
+;;   (let ((cnt 0) (allowreset #t))
+;;     (lambda (beat dur)
+;;       (println "test:" 'beat beat 'dur: dur 'tt: (- (*metro* (+ beat (* .125 dur))) (now)) 'time: (now) 'metro: (*metro* (+ beat (* .125 dur))) 'mark: (*metro* 'get-mark))
+;;       (set! cnt (+ cnt 1))
+;;       (set! total-beat beat)
+;;       (let* ((maj? (if (< *key* 0) #f #t))
+;;              (key (if maj? *key* (modulo (* *key* -1) 12)))
+;;              (density_controller (real->integer (/ (cim_get_pedal 3) 25.0))))
+;;         (if (and (> (cim_get_pedal 4) 10) allowreset)
+;;             (begin
+;;               (println "reset pedal")
+;;               (set! allowreset #f)
+;;               (reset_buffers)))
+;;         (if (= 0 (cim_get_pedal 4))
+;;             (begin
+;;               (set! allowreset #t)))
+;;         (if (> (cim_get_pedal 5) 0)
+;;             (begin
+;;               (if *osc:on*
+;;                   (begin 
+;;                     (io:osc:send (now) addy1 "/CIMdisplay/panicLED" 1)
+;;                     (io:osc:send (+ (now) 10000) addy1 "/CIMdisplay/panicLED" 0)))
+;;               (println "panic pedal")
+;;               (panic *midi-out*)))
+;;         ;; metronome 
+;;         (playob 0 1 fmsynth (+ key 72) 70 (* .4 dur) 1.0 0.5)
+;;         (playob 0 1 fmsynth (+ key 84) 50 (* .1 dur) 1.0 0.5)
+;;         ;; (hplay (- 0 0.1) *midi-out* 96 40 0.1)        
+;;         (if (> (cim_get_pedal 3) 0)
+;;             (if (= 0 (modulo beat (list-ref '(16 8 4 3 2 1) density_controller)))
+;;                 (begin
+;;                   (play-chunk beat *midi-out* 1.5 (list-ref '(16 8 4 3 2 1) density_controller)))))
+;;         (callback (*metro* (+ beat (* .125 dur))) 'test (+ beat dur) dur)))))
+
+;; (test (*metro* 'get-beat 4) 1)
+
+(define update-metro
+  (lambda (bpm time beats)
+    (set! *metro* (make-metro bpm (cons time beats)))))
+
+(bind-func console_print
+  (lambda (str:i8*)
+    (ascii_text_color 1 0 3)
+    (printf "%s \r" str)
+    void))
+
+(define lasttime 0)
+(define lastbpm 120)
+
+(define beat-loop
+  (let ((cnt 0) (allowreset #t))  
+    (lambda (beat dur)
+      ;;(println "LED" (now))    
+      (set! *key* (current_key))
+      (set! *pcs* (current-pcs))
+      (set! *low* (current_pitch_range_low))
+      (set! *high* (current_pitch_range_high))
+      (set! *density* (current_density))
+      (set! *polyphony* (current_polyphony_cnt))
+      (set! *bpm* (current_bpm))
+      ;;(println 'key: *key* 'bpm: *bpm*)
+      ;;(print_rhythm_bins)
+      (if *osc:on*
+          (begin 
+            (io:osc:send (*metro* beat) addy1 "/CIMdisplay/tempoLED" 1)
+            (io:osc:send (+ 5000 (*metro* beat)) addy1 "/CIMdisplay/tempoLED" 0)    
+            (io:osc:send (now) addy1 "/CIMdisplay/bpm" (number->string *bpm*))
+            (io:osc:send (now) addy1 "/CIMdisplay/keyRoot" (list-ref (list "C" "C#" "D" "Eb" "E" "F" "F#" "G" "Ab" "A" "Bb" "B" "C") (abs *key*)))
+            (io:osc:send (now) addy1 "/CIMdisplay/keyQuality" (if (< *key* 0) "Minor" "Major"))))      
+      (if (or (<> lasttime (get_phase_time))
+              (<> lastbpm *bpm*))
+          (begin
+            (set! lasttime (get_phase_time))
+            ;;(play-note (now) fmsynth 96 90 3000)
+            (println "CHANGE METRO!" lasttime (*metro* beat) (now))
+            ;; (callback (+ lasttime (* 2. *samplerate* (/ 60.0 *bpm*)))
+            ;;           'update-metro (current_bpm)
+            ;;           (+ lasttime (* 2. *samplerate* (/ 60.0 *bpm*)))
+            ;;           (+ total-beat 1))))
+            (callback (+ (*metro* beat) (* *samplerate* (/ 60.0 *bpm*)))
+                      'update-metro (current_bpm)
+                      (+ (*metro* beat) (* *samplerate* (/ 60.0 *bpm*)))
+                      (+ total-beat 1))))
+      (set! lastbpm *bpm*)
+      (set! cnt (+ cnt 1))
+      (set! total-beat beat)
+      (let* ((maj? (if (< *key* 0) #f #t))
+             (key (if maj? *key* (modulo (* *key* -1) 12)))
+             (density_controller (real->integer (/ (cim_get_pedal 3) 25.0))))
+        (if (and (> (cim_get_pedal 4) 10) allowreset)
+            (begin
+              (println "reset pedal")
+              (set! allowreset #f)
+              (reset_buffers)))
+        (if (= 0 (cim_get_pedal 4))
+            (begin
+              (set! allowreset #t)))
+        (if (> (cim_get_pedal 5) 0)
+            (begin
+              (if *osc:on*
+                  (begin 
+                    (io:osc:send (now) addy1 "/CIMdisplay/panicLED" 1)
+                    (io:osc:send (+ (now) 10000) addy1 "/CIMdisplay/panicLED" 0)))
+              (println "panic pedal")
+              (panic *midi-out*)))
+        ;; metronome 
+        ;(playob 0 1 fmsynth (+ key 72) 70 (* .4 dur) 1.0 0.5)
+        ;(playob 0 1 fmsynth (+ key 84) 50 (* .1 dur) 1.0 0.5)
+        ;; (hplay (- 0 0.1) *midi-out* 96 40 0.1)        
+        (if (> (cim_get_pedal 3) 0)
+            (if (= 0 (modulo beat (list-ref '(16 8 4 3 2 1) density_controller)))
+                (begin
+                  (play-chunk beat *midi-out* 1.5 (list-ref '(16 8 4 3 2 1) density_controller))))))
+      (callback (*metro* (+ beat (* 0.95 dur))) 'beat-loop (+ beat dur) dur))))
+
+(beat-loop (*metro* 'get-beat 1) 1)
+
+(define display-feedback
+  (lambda ()
+    (if *osc:on*
+        (let ((density_controller (real->integer (/ (cim_get_pedal 3) 25.0))))
+          (if (> (cim_get_pedal 1) 30)
+              (io:osc:send (now) addy1 "/CIMdisplay/analyseLED" 1)
+              (io:osc:send (now) addy1 "/CIMdisplay/analyseLED" 0))
+          (if (> (cim_get_pedal 2) 30)
+              (io:osc:send (now) addy1 "/CIMdisplay/recordLED" 1)
+              (io:osc:send (now) addy1 "/CIMdisplay/recordLED" 0))
+          (if (> (cim_get_pedal 3) 0)
+              (io:osc:send (now) addy1 "/CIMdisplay/pbInt"
+                           (list-ref '(16 8 4 3 2 1) density_controller))
+              (io:osc:send (now) addy1 "/CIMdisplay/pbInt" 0))))
+    (callback (+ (now) 4000) 'display-feedback)))
+
+(display-feedback)
+
+;; (cim_print_midi_messages 0)
+
+(define reset_buffers
+  (lambda ()
+    (println "RESET BUFFERS")
+    (if *osc:on*
+        (begin
+          (io:osc:send (now) addy1 "/CIMdisplay/flushLED" 1)
+          (io:osc:send (+ (now) 25000) addy1 "/CIMdisplay/flushLED" 0)))
+    (set! pitch-list '())
+    (note_buffer_reset)
+    (midi_msg_buffer_reset)))
+
+(reset_buffers)
+
+;(cim_set_pedal 3 60)
+;(cim_set_pedal 2 0)
+;(cim_set_pedal 1 0)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; init midi stuff
