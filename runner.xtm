@@ -189,7 +189,7 @@
                   ))))))))
 
 
-;(cim_set_pedal 3 100); 0-127
+;(cim_set_pedal 3 100); 0-127 set density when pedal not availble
 
 (define test
   (let ((cnt 0) (allowreset #t))
@@ -217,7 +217,7 @@
         ;; (playob 0 1 fmsynth (+ key 84) 50 (* .1 dur) 1.0 0.5)
         ;; (hplay (- 0 0.1) *midi-out* 96 40 0.1)
         ;(println "test" density_controller)
-        (if (> (cim_get_pedal 3) 0) ;;  check for density controller set to 'off'
+        (if (> (cim_get_pedal 3) 0) ;;  check for density foot pedal set to 'off'
             (if (= 0 (modulo beat (list-ref '(1 2 4 8 16) density_controller)))
                 (play-chunk beat *midi-out* 3.0 (list-ref '(1 2 4 8 16) density_controller))))
         (callback (*metro* (+ beat (* .125 dur))) 'test (+ beat dur) dur)))))

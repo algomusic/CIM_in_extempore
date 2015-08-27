@@ -1,0 +1,18 @@
+(define transform-pitches
+  (lambda (lst)
+    ;(println (current_pitch_range_low) (current_pitch_range_high)
+      ;; add some small random transposition to afford phrase seqence outcomes.
+    (if (< (random) .2)
+      (let ((t (random '(2 4 5 7 -3 -5))))
+        (set! lst (ivl:transpose t lst))))
+    ;; try to move out of range of human
+    (if (and (> (list-ref lst 0) (current_pitch_range_low))
+             (< (list-ref lst 0) (current_pitch_range_high)))
+      (if (> (list-ref lst 0) (/ (+ (current_pitch_range_low) (current_pitch_range_high)) 2))
+        (set! lst (ivl:transpose 12 lst))
+        (set! lst (ivl:transpose -12 lst))))
+    (if (< (random) .2) (set! lst (ivl:invert lst)))
+    (set! pitch-list (map (lambda (i) (if (>= i 0) (+ i (random -1 2)) i)) lst))))
+    ;; contour spread
+    ;(set! pitch-list (map (lambda (i) (if (>= i 0) (random 20 100) i)) lst)))) ;; randomise pitches
+    ;(set! pitch-list (map (lambda (i) i) lst)))) ;; no change

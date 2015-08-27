@@ -89,7 +89,7 @@
 (bind-val CIMNoteBufferStartTimeI i64 0)
 (bind-val CIMNoteBufferStartTimeD double 0.0)
 
-(bind-val myNote CIMNote* (CIMNote 0 1.0 1.0 1 1 1/2 3.0))
+;;(bind-val myNote CIMNote* (CIMNote 0 1.0 1.0 1 1 1/2 3.0))
 
 (bind-func cim_save_note_buffer
   (lambda (filename)
@@ -1676,7 +1676,7 @@
     (lambda ()
       (set! low 127)
       (dotimes (i 127)
-        (if (and (> (aref CIMNoteDurResolver i) -1)
+        (if (and (>  (aref CIMNoteDurResolver i) -1)
                  (< i low))
             (set! low i)))
       low)))
