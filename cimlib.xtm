@@ -1,5 +1,5 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
+;; 
 ;; CIM - Controlling Interactive Music
 ;;
 ;; Top Level Functions callable from scheme
@@ -8,7 +8,9 @@
 ;; current_key
 ;; current_density
 ;; current-pcs (a scheme wrapper for current_pcs)
-;; 
+;;
+;; cim pedal 1 = analysis
+;; cim pedal 2 = record
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -88,8 +90,6 @@
 (bind-val CIMNoteDurResolver |127,i64|)
 (bind-val CIMNoteBufferStartTimeI i64 0)
 (bind-val CIMNoteBufferStartTimeD double 0.0)
-
-;;(bind-val myNote CIMNote* (CIMNote 0 1.0 1.0 1 1 1/2 3.0))
 
 (bind-func cim_save_note_buffer
   (lambda (filename)
@@ -231,13 +231,13 @@
 
 (bind-func note_buffer_reset
   (lambda ()
+    ;;(memset (cast CIMNoteBuffer) 0 (* 1000000 40))
     (set! CIMNoteBufferIdx 0)))
 
 (bind-func dump_note_buffer
   (lambda ()
     (doloop (i CIMNoteBufferIdx)
       (println (retrieve_note i)))))
-
 
 (bind-func find_note_a
   (lambda (timea timeb)
@@ -407,8 +407,8 @@
         (printout "<CHUNK: NULL>")
         (begin
           (printout "<CHUNK: valid: " (cim_chunk_valid chunk)) ;; " onset: " (cim_note_onset (cim_chunk_start chunk)))
-          (printout "\nstart  : " (cim_note_onset (cim_chunk_start chunk)) " idx: " (cim_chunk_start_index chunk))
-          (printout "\nend    : " (cim_note_onset (cim_chunk_end chunk)) " idx: " (cim_chunk_end_index chunk))
+          (printout "\nstart  : " (cim_note_onset (cim_chunk_start chunk)) " idx: " (cim_note_index (cim_chunk_start chunk)))
+          (printout "\nend    : " (cim_note_onset (cim_chunk_end chunk)) " idx: " (cim_note_index (cim_chunk_end chunk)))
           (printout "\nnotes  : " (cim_chunk_size chunk))          
           (printout "\nonset  : " (cim_chunk_onset chunk))
           (printout "\nbpm    : " (cim_chunk_bpm chunk))
@@ -419,14 +419,51 @@
 
 (bind-poly print CIMChunk_print)
 
-(bind-val CIMDefaultGapSize double 2.0)
+(bind-val CIMDefaultGapSize double 3.0)
+
+(bind-func cim_note_closure
+  (lambda (a:CIMNote* b:CIMNote* c:CIMNote*)
+    (if (or (null? a) (null? b) (null? c)) #f
+        (let ((key (cim_note_key a))
+              (root (tref key 0))
+              (majmin (tref key 1))
+              (p1 (cim_note_pitch a))
+              (p2 (cim_note_pitch b))
+              (p3 (cim_note_pitch c))
+              (p312 (% p3 12))
+              (i1 (- p2 p1))
+              (i2 (- p3 p2))
+              (d1 (cim_note_duration a))
+              (d2 (cim_note_duration b))
+              (d3 (cim_note_duration c))
+              (t1 (* (- d3 d2) 5.0)) ;; test1 d3 is longer than d2
+              (t2 (if (or (and (> i1 0) (< i2 0))
+                          (and (< i1 0) (> i2 0))) ;; test2 change in direction
+                      10.0   ;; change in direction
+                      0.0))  ;; or not
+              (t3 (if (> (* i1 i1) (* i2 i2)) 10.0 0.0)) ;; test3 large to small interval
+              (t4 (if (= root p312) 10.0 ;; test4 (finishes on root=10.0 3rd=5.0 5th=5.0)
+                      (if (= (% (+ 7 root) 12) p312) 5.0 ;; 7th
+                          (if (= (% (+ (if majmin 4 3) root) 12) p312) 5.0 ;; 3rd
+                              0.0))))) ;; else 0.0
+
+          (if (> (+ t1 t2 t3 t4) 25.0)
+              (println "closure" t1 t2 t3 t4 (+ t1 t2 t3 t4) p1 p2 p3))
+          (if (> (+ t1 t2 t3 t4) 25.0)
+              #t
+              #f)))))
+          
 
 ;; where startidx is note index to start searching from
 ;; and endidx is the number of notes to check over
 ;; if endidx is negative then start from startidx and work backwards
+;;
+;; if gapsize > 0.0 split based on gapsize
+;; if gapsize == 0.0 then split based on elements of closure.
 (bind-func find_chunk_a
   (let ((chunk:CIMChunk* (alloc)))
     (lambda (chunk_num:i64 gapsize:double startidx:i64 endidx:i64)
+      ;; (println "in find chunk a: " chunk_num)
       (tset! chunk 0 #f)
       (let ((duration 0.0)
             (backward (if (< endidx 0) #t #f))
@@ -436,7 +473,12 @@
             (ptime 0.0)
             (finished #f)
             (note (retrieve_note startidx)))
-        (while (and (not (null? note)) (not finished))
+        ;; (println "findchk:")
+        ;; (println "startnote: " startnote)
+        ;; (println "note: " note)
+        ;; (println "KKK")
+        (while (and (not (null? note))
+                    (not finished))
           (if (if backward
                   (> (- ptime (+ (cim_note_onset note) (cim_note_duration note))) gapsize)
                   (> (- (cim_note_onset note) ptime) gapsize))
@@ -448,27 +490,28 @@
                            void)
                     (begin (set! startidx (+ startidx 0))
                            (set! startnote note)
+                           ;(set! oldnote2 null)
+                           ;(set! oldnote1 null)
                            void)))
-              (begin (set! startidx (+ startidx inc)) void))
+              (begin
+                (set! startidx (+ startidx inc)) void))
           (set! ptime
                 (if backward
                     (cim_note_onset note)
                     (+ (cim_note_onset note) (cim_note_duration note))))
           (set! note (retrieve_note startidx)))
-        (if (null? startnote)
+        (if (and (null? note) (< chunk_num 2))
+            (begin
+              (set! finished #t)
+              (set! note (last_note))))
+        (if (or (not finished) (null? note) (null? startnote))
             null
             (begin
               (set! duration 0.0)
               (set! bpm (cim_note_bpm startnote))
-              (if (and (null? note)
-                       (= chunk_num 1))
-                  (begin
-                    (set! finished #t)
-                    (set! note (last_note))))
-              (if finished
-                  (set! duration (- (+ (cim_note_onset note)
-                                       (cim_note_duration note))
-                                    (cim_note_onset startnote))))
+              (set! duration (- (+ (cim_note_onset note)
+                                   (cim_note_duration note))
+                                (cim_note_onset startnote)))
               (tfill! chunk finished
                       startnote
                       note
@@ -512,7 +555,7 @@
       (while (cim_chunk_valid chunk)
         (set! idx (+ idx 1))
         (set! chunk (find_chunk idx gap)))
-      idx)))
+      (- idx 1))))
 
 (bind-func num_chunks_b
   (lambda (gap startidx endidx)
@@ -521,7 +564,7 @@
       (while (cim_chunk_valid chunk)
         (set! idx (+ idx 1))
         (set! chunk (find_chunk idx gap)))
-      idx)))
+      (- idx 1))))
 
 (bind-poly num_chunks num_chunks_a)
 (bind-poly num_chunks num_chunks_b)
@@ -542,22 +585,22 @@
   (lambda (gap homophonic startidx endidx d1 d2)
     (let ((num (num_chunks_b gap startidx endidx))
           (cnt:i64 20)
-          (chunk (find_chunk (dtoi64 (* (i64tod num) (random))) gap startidx endidx)))
+          (chunk (find_chunk (dtoi64 (+ 1.0 (* (i64tod num) (random)))) gap startidx endidx)))
       (while (and (or (< (cim_chunk_size chunk) 1)
                       (if (< homophonic 0.0)
-                          (> (cim_chunk_homophonic chunk) (* -1.0 homophonic))
-                          (< (cim_chunk_homophonic chunk) homophonic))
+                         (> (cim_chunk_homophonic chunk) (* -1.0 homophonic))
+                         (< (cim_chunk_homophonic chunk) homophonic))
                       (< (* (cim_chunk_duration chunk)
                             (/ (cim_chunk_bpm chunk) 60.0))
                          d1)
                       (> (* (cim_chunk_duration chunk)
                             (/ (cim_chunk_bpm chunk) 60.0))
-                         d2))
+                         d2)
+                      #f)
                   (> cnt 0))
         (set! chunk null)
         (set! cnt (- cnt 1))
-        (set! chunk (find_chunk (dtoi64 (* (i64tod num) (random)))) gap startidx endidx))
-      ;(println "cnt:" cnt)
+        (set! chunk (find_chunk (dtoi64 (+ 1.0 (* (i64tod num) (random)))) gap startidx endidx)))
       (if (or (< (cim_chunk_size chunk) 1)
               (if (< homophonic 0.0)
                   (> (cim_chunk_homophonic chunk) (* -1.0 homophonic))
@@ -662,7 +705,8 @@
           (if (or (= type MIDI_NOTE_ON)
                   (= type MIDI_CC)) ;; all CC data is added as negative pitch
               (begin
-                (if (= CIMNoteBufferIdx 0) (set! CIMNoteBufferStartTimeI time))
+                ;;(if (= CIMNoteBufferIdx 0) (set! CIMNoteBufferStartTimeI time))
+                (if (= CIMNoteBufferStartTimeI 0) (set! CIMNoteBufferStartTimeI time))
                 (let ((note:CIMNote* (aref-ptr CIMNoteBuffer CIMNoteBufferIdx)))
                   (tfill! note CIMNoteBufferIdx
                           (/ (i64tod (- time CIMNoteBufferStartTimeI)) (ftod SRf))
@@ -932,7 +976,6 @@
   (lambda (device:i8* a:i8 b:i8 c:i8 d:i8)
     (midi_send (cast device) a b c d)))
 
-
 ;; where timea and timeb are limits for startime not endtime
 (bind-func midi_playback_a
   (lambda (time device:i8* timea timeb control_only:i1)
@@ -1034,7 +1077,7 @@
               (set! firstm (aref rhythmbins i))
               (set! firsti i)
               (set! idx i))))
-      ;; (printout "first: [" firsti "," firstm "] second: [" secondi "," secondm "]\n")      
+      ;;(printout "first: [" firsti "," firstm "] second: [" secondi "," secondm "]\n")      
       (set! firstbpm (+ bpm_low (* (i64tod firsti) bpm_mod)))
       (set! secondbpm (+ bpm_low (* (i64tod secondi) bpm_mod)))
       (set! weight (if (= 0 firstm) 1.0 (/ (i64tod secondm) (i64tod firstm))))
@@ -1042,8 +1085,8 @@
       (if useweighting
           (set! bpm (+ firstbpm (* weight (- secondbpm firstbpm))))
           (set! bpm firstbpm))
-      ;; (printout "bpm:" bpm " bpm1:" firstbpm " bpm2:" secondbpm " "
-      ;;           (* weight (- secondbpm firstbpm)) " weight:" weight "\n")
+      ;(printout "bpm:" bpm " bpm1:" firstbpm " bpm2:" secondbpm " "
+      ;          (* weight (- secondbpm firstbpm)) " weight:" weight "\n")
       (if (> firstm 7)
           (begin
             (dotimes (i NumRhythmBins)
@@ -1057,12 +1100,13 @@
             void)
           (begin
             (set! CIM_GLOBAL_BPM_CONFIDENCE (+ 1 CIM_GLOBAL_BPM_CONFIDENCE))
-            void))          
+            void))
       (if (and (>= CIM_GLOBAL_BPM_CONFIDENCE CIM_GLOBAL_BPM_CONFIDENCE_WEIGHT)
-               (= (cim_get_pedal 2) 0))
+               (> (cim_get_pedal 1) 30))
           (begin
-            ;; (println "updating global metro " CIM_GLOBAL_BPM " ... ")
+            ;;(println "updating global metro " CIM_GLOBAL_BPM " ... ")
             (set! CIM_GLOBAL_BPM current_bpm)))
+      ;;(print_rhythm_bins)
       (dtoi64 CIM_GLOBAL_BPM))))
 
 (bind-func bpm_analysis
@@ -1076,6 +1120,8 @@
         (bin 0.0))
     (lambda (note:CIMNote*)
       (set! this_onset (cim_note_onset note))
+      (if (< this_onset .1)
+          (println "Why does this note not have an onset time!: " this_onset))
       (if (and (> (- this_onset previous_onset) .1)
                (< (- this_onset previous_onset) 2.0))
           (begin
@@ -1337,8 +1383,6 @@
       (println "")
       void)))
 
-(bind-val *KEY* i64 0)
-
 ;; negative numbers for minor
 ;; positive numbers for major
 ;; -12 for C minor
@@ -1570,7 +1614,7 @@
                    ;; (println "1/2 NOTE CHANGE")
                    (dotimes (i 4) (aset! bucket i 0))
                    (aset! bucket 0 2)
-                   (if (and (= 0 (cim_get_pedal 2))
+                   (if (and (> (cim_get_pedal 1) 30)
                             (> incerr errmax))
                        (begin
                          (set! incerr 0)
@@ -1588,7 +1632,7 @@
                    ;; (println "1/4 NOTE CHANGE")
                    (dotimes (i 4) (aset! bucket i 0))
                    (aset! bucket 0 2)
-                   (if (and (= 0 (cim_get_pedal 2))
+                   (if (and (> (cim_get_pedal 1) 30)
                             (> incerr errmax))                               
                        (begin
                          (set! incerr 0)
@@ -1602,7 +1646,7 @@
                  (begin (dotimes (i 4) (aset! bucket i 0))
                         ;; (println "ERR CHANGE")
                         (aset! bucket 0 1)
-                        (if (and (= 0 (cim_get_pedal 2))
+                        (if (and (> (cim_get_pedal 1) 30)
                                  (> incerr errmax))
                             (begin
                               (set! incerr 0)
@@ -1709,8 +1753,8 @@
 (bind-func analysis
   (lambda (time:i64 note:CIMNote*)
     (if (null? note) void
-        (begin
-          ;;(println ">>" note)          
+        (begin          
+          ;;(println "analysis: >>" note)          
           (bpm_analysis note)
           (pulse_analysis time)
           (key_analysis note)
@@ -1748,22 +1792,28 @@
           (let ((t1 (now))
                 (t2 (dtoi64 (* SRd (- (clock_clock) (audio_clock_base)))))
                 (t t2))
-            ;; (println t1 t2 (- t1 t2))            
             (if CIM_PRINT_MIDI_MESSAGES (println "midi-in" type chan a b))
             (record_midi_msg t type (convert chan) (convert a) (convert b))
-            (if (and (or (= type MIDI_NOTE_ON) (= type MIDI_NOTE_OFF))
-                     (= (cim_get_pedal 2) 0))
-                (begin
-                  (set! idx (record_note t type (convert chan) (convert a) (convert b)))
-                  (set! note (retrieve_note idx))
-                  (analysis t note)
-                  (if (and (> idx -1) (> (cim_get_pedal 1) 0))
-                      (begin
-                        (set! CIMNoteBufferIdx (- CIMNoteBufferIdx 1))))))
+            (if (or (= type MIDI_NOTE_ON) (= type MIDI_NOTE_OFF))
+                (if (<> chan 1:i8)
+                    (begin
+                      (set! idx (record_note t type (convert chan) (convert a) (convert b)))
+                      (set! note (retrieve_note idx))
+                      (if (> (cim_get_pedal 1) 30) (analysis t note))
+                      (if (and (> idx -1) (= (cim_get_pedal 2) 0))
+                          (begin
+                            (set! CIMNoteBufferIdx (- CIMNoteBufferIdx 1))))
+                      void)
+                    (begin
+                      (cond ((= a 4:i8) (cim_set_pedal 1 (i8toi64 b)) void)
+                            ((= a 5:i8) (cim_set_pedal 2 (i8toi64 b)) void)
+                            ((= a 3:i8) (cim_set_pedal 4 (i8toi64 b)) void)
+                            ((= a 2:i8) (cim_set_pedal 5 (i8toi64 b)) void)            
+                            (else void))
+                      void)))
             (if (= type MIDI_CC)
                 (cond ((= a 64:i8)
-                       (if (and (= (cim_get_pedal 1) 0)
-                                (= (cim_get_pedal 2) 0))
+                       (if (= (cim_get_pedal 2) 30)
                            (record_note t type (convert chan) (convert a) (convert b)))
                        void)
                       ((= a 66:i8)
@@ -1778,7 +1828,13 @@
                       ((= a 69:i8)
                        (cim_set_pedal 2 (i8toi64 b))
                        void)
-                      ((= a 21:i8)
+                      ((= a 10:i8) ;; 10 and 21 the same
+                       (cim_set_pedal 3 (i8toi64 b))
+                       void)
+                      ((= a 7:i8) ;; 10 and 21 the same
+                       (cim_set_pedal 3 (i8toi64 b))
+                       void)
+                      ((= a 21:i8) ;; 10 and 21 the same
                        (cim_set_pedal 3 (i8toi64 b))
                        void)
                       (else ;; nothing,
