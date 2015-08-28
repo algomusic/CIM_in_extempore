@@ -29,7 +29,7 @@
 
 (println "MIDI out port is" midi-out-port "MIDI in port is" midi-in-port)
 
-(sys:load "../CIM_in_extempore/cimlib.xtm")
+(sys:load "../../CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/core/pc_ivl.xtm")
 ;; init MIDI stuff
 
@@ -77,11 +77,23 @@
 ;; pitch transformations
 (define pitch-list ())
 
-(define transform-pitches
-  (lambda (lst)
-    (set! pitch-list (map (lambda (i) (if (>= i 0) (+ i (random -4 4))) i) lst))))
+(case (random 3)
+  ((0) 0)
+  ((1) 1))
 
-;(transform-pitches)
+(define transform-pitches
+  (lambda (lst chnkKey)
+    ;;(set! pitch-list (map (lambda (i) (+ i (abs chnkKey) - (abs *key*))) lst))
+    (case (random 4)
+      ;((0) (set! pitch-list (map (lambda (i) i) lst))) ;; no change
+      ((1 2) 
+        (set! pitch-list (map (lambda (i) (if (> i 48) (+ i (random -3 4)) i)) lst))) ;; jitter
+      ((3) (let ((trans (random '(12 -12 7 -5)))) ;; transpose and jitter a bit
+        (set! pitch-list (map (lambda (i) (if (> i 48) (+ i trans (random -1 2)) i)) lst)))))))
+
+    ;(set! pitch-list (map (lambda (i) (if (>= i 0) 60 i)) lst))))
+
+;;(transform-pitches pitch-list)
 
 (define get-pitches-from-chunk
   (lambda (chnk)
@@ -163,8 +175,9 @@
       ;;(println 'scale: scale 'bpm: )
       ;;(print_chunk_notes idx size)
       
-      ;(transform-pitches (get-pitches-from-chunk chunk))
-      (get-pitches-from-chunk chunk)
+      (transform-pitches (get-pitches-from-chunk chunk) chunkkey)
+      ;; transpose into current key if required
+      ;;(get-pitches-from-chunk chunk)
       ;;(println 'got-pitches)
       (if (= (cim_chunk_valid chunk) 1)
           (dotimes (i size)
@@ -199,7 +212,7 @@
                            (pc:quantize (real->integer (+ (- key ckey)
                                                          (list-ref pitch-list i)))
                                         scale)
-                           (cim_chunk_note_volume chunk i)
+                           (+ (cim_chunk_note_volume chunk i) (random -15 15))
                            (cim_chunk_note_duration chunk i))))
                 (begin
                   (if (> dcontrol 2)
