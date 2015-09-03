@@ -171,21 +171,21 @@
 (define *polyphony* 0)
 
 ;; pitch transformations
-(define pitch-list ())
-
-(case (random 3)
-  ((0) 0)
-  ((1) 1))
+(define pitch-list '(60)) ;; start with dummy data
 
 (define transform-pitches
   (lambda (lst chnkKey)
-    ;;(set! pitch-list (map (lambda (i) (+ i (abs chnkKey) - (abs *key*))) lst))
-    (case (random 4)
-      ;((0) (set! pitch-list (map (lambda (i) i) lst))) ;; no change
-      ((1 2) 
-        (set! pitch-list (map (lambda (i) (if (> i 48) (+ i (random -3 4)) i)) lst))) ;; jitter
-      ((3) (let ((trans (random '(12 -12 7 -5)))) ;; transpose and jitter a bit
-        (set! pitch-list (map (lambda (i) (if (> i 48) (+ i trans (random -1 2)) i)) lst)))))))
+    (if (and (not (null? lst))
+              (cl:find-if (lambda (x) (>= x 0)) lst))
+      (begin ;(println lst)
+        (case (random 4)
+          ((0) (set! pitch-list lst)) ;; no change
+          ((1) (let ((p1 (car (cl:remove-if (lambda (x) (< x 0)) lst)))) ;; invert
+                 (set! pitch-list (map (lambda (i) (if (>= i 0) (+ p1 (- p1 i)) i)) lst))))
+          ((1 2) 
+            (set! pitch-list (map (lambda (i) (if (> i 48) (+ i (random -3 4)) i)) lst))) ;; jitter
+          ((3) (let ((trans (random '(12 -12 7 -5)))) ;; transpose and jitter a bit
+            (set! pitch-list (map (lambda (i) (if (> i 48) (+ i trans (random -1 2)) i)) lst)))))))))
 
     ;(set! pitch-list (map (lambda (i) (if (>= i 0) 60 i)) lst))))
 
@@ -228,7 +228,7 @@
 
 (define play-midi-cc
   (lambda (time device cc val channel)
-    (record_midi_msg (real->integer time) *midi-cc* (real->integer cc) (real->integer velocity))    
+    (record_midi_msg (real->integer time) *midi-cc* 13 (real->integer cc) (real->integer val))    
     (callback (real->integer time) 'midi_send device *midi-cc* (real->integer channel) (real->integer cc) (real->integer val))))
 
 (bind-func print_chunk_notes
