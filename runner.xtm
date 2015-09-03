@@ -471,8 +471,8 @@
     (note_buffer_reset)
     (if *osc:on*
         (begin
-          (let ((num (num_chunks_b gap 0 0)))
-            (io:osc:send (*metro* beat) addy1 "/CIMdisplay/segs" (number->string num))
+          (let ((num (num_chunks_b 1.5 0 0)))
+            (io:osc:send (now) addy1 "/CIMdisplay/segs" (number->string num))
             (io:osc:send (now) addy1 "/CIMdisplay/flushLED" 1)
             (io:osc:send (+ (now) 25000) addy1 "/CIMdisplay/flushLED" 0))))
     (println "RESET BUFFERS")))
