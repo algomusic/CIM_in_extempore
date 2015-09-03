@@ -1,15 +1,104 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; LOADS
+;;
+;; command for precopmiling cimlib
+;; first copy cimlib into "extempore/libs/contrib/cimlib.xtm"
+;; then start extempore (without loading or running anything!)
+;;
+;; then eval this expr:
+;;
+;; (sys:precomp:compile-xtm-file "libs/contrib/cimlib.xtm" #t #t #t)
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define with-dsp? (if (or (string=? "" (sys:cmdarg "audio"))
+                          (string=? "0" (sys:cmdarg "audio")))
+                      #f #t))
+(define with-sustain? (if (or (string=? "" (sys:cmdarg "sustain"))
+                              (string=? "0" (sys:cmdarg "sustain")))
+                          #f #t))
+
+;;(sys:load "../CIM_in_extempore/cimlib.xtm")
+(sys:load "libs/contrib/cimlib.xtm")
+(sys:load "libs/core/pc_ivl.xtm")
+(if with-dsp? (sys:load "libs/external/instruments_ext.xtm"))
+
+(println "Sustain playback is: " with-sustain?)  
+(println "Local audio playback is: " with-dsp?)
+
 ;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; osc stuff
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;
 
-(define *osc:on* #t)
+(define *osc:on* #f)
 
 (if *osc:on* (io:osc:start-server 9000 "osc-receive-9000"))
 
 ;; define a sending address
 (define addy1 (cons "169.254.52.46" 9000))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; utilities
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; utilities
+(define panic
+  (lambda (device)
+    (midi_send device *midi-cc* 0 64 0)
+  	(dotimes (c 16)
+  		(dotimes (i 127)
+    		(midi_send device 8 c i 0)))))
+
+(define current-pcs
+  (lambda ()
+    (let ((pcs_cptr (current_pcs)))
+      (map (lambda (i)
+             (cptr:get-i64 pcs_cptr (* i 8)))
+           (range 0 12)))))
+
+
+;; where timea and timeb are limits for startime not endtime
+;; where variance is a distance 'around' timea and timeb
+(if with-dsp?
+    (eval
+     '(bind-func note_playback
+       (lambda (time instrument startnote:CIMNote* endnote:CIMNote*)
+         (println "playback -------")
+         (println "from:" startnote)
+         (println "to  :" endnote)
+         (println)
+         (if (or (null? startnote)
+                 (null? endnote))
+             void
+             (let ((startidx (cim_note_index startnote))
+                   (starttime (dtoi64 (* -1.0 CIMSRd (cim_note_onset startnote))))
+                   (endidx (cim_note_index endnote))
+                   (num (+ 1 (- endidx startidx)))
+                   (note null)
+                   (pitch 0)
+                   (duration 0)
+                   (i 0))
+               (dotimes (i num)              
+                 (set! note (retrieve_note (+ i startidx)))
+                 (xtm_play_note (+ time
+                                   (dtoi64 (* CIMSRd (cim_note_onset note)))
+                                   starttime)
+                                instrument                             
+                                (midi2frq (i64tof (cim_note_pitch note)))
+                                (/ (exp (/ (i64tof (cim_note_volume note)) 26.222)) 127.0)
+                                (dtoi64 (* CIMSRd (cim_note_duration note)))
+                                0 null))
+               void))))
+     (interaction-environment)))
+
+;; (bind-poly note_playback note_playback_a)
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -29,8 +118,6 @@
 
 (println "MIDI out port is" midi-out-port "MIDI in port is" midi-in-port)
 
-(sys:load "../../CIM_in_extempore/cimlib.xtm")
-(sys:load "libs/core/pc_ivl.xtm")
 ;; init MIDI stuff
 
 (define *midi-in* (midi_new_indevice))
@@ -48,21 +135,22 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(sys:load "libs/external/instruments_ext.xtm")
+(if with-dsp?
+    (eval 
+     '(bind-func dsp:DSP 1000000
+        (let ((t 0))
+          (lambda (in time chan dat)
+            (if (= t 0) (set! t time))
+            (if (< chan 2)
+                (+ (fmsynth in time chan dat)
+                   0.0)
+                0.0))))
+     (interaction-environment)))
 
-(bind-func dsp:DSP 1000000
-  (let ((t 0))
-    (lambda (in time chan dat)
-      (if (= t 0) (set! t time))
-      (if (< chan 2)
-          (+ (fmsynth in time chan dat)
-             0.0)
-          0.0))))
-
-(dsp:set! dsp)
-
-;;(fmsynth_fx.dfb .01)
-(fmsynth_fx.dfb .4)
+(if with-dsp?
+    (begin
+      (dsp:set! dsp)
+      (fmsynth_fx.dfb .4)))
 
 (define total-beat 0)
 
@@ -100,7 +188,6 @@
     (set! pitch-list
           (make-list-with-proc (cim_chunk_size chnk)
                                (lambda (i) (cim_chunk_note_pitch chnk i))))))
-
 
 ;; homophonic playnote
 (define homo-play-midi-note
@@ -270,6 +357,7 @@
 (define lasttime 0)
 (define lastbpm 120)
 
+
 (define beat-loop
   (let ((cnt 0) (allowreset #t))  
     (lambda (beat dur)
@@ -326,9 +414,11 @@
                     (io:osc:send (+ (now) 10000) addy1 "/CIMdisplay/panicLED" 0)))
               (println "panic pedal")
               (panic *midi-out*)))
-        ;; metronome 
-        ;(playob 0 1 fmsynth (+ key 72) 70 (* .4 dur) 1.0 0.5)
-        ;(playob 0 1 fmsynth (+ key 84) 50 (* .1 dur) 1.0 0.5)
+        ;; metronome
+        ;; (if with_dsp?
+        ;;     (begin 
+        ;;       (playob 0 1 fmsynth (+ key 72) 70 (* .4 dur) 1.0 0.5)
+        ;;       (playob 0 1 fmsynth (+ key 84) 50 (* .1 dur) 1.0 0.5)))
         ;; (hplay (- 0 0.1) *midi-out* 96 40 0.1)        
         (if (> (cim_get_pedal 3) 0)
             (if (= 0 (modulo beat (list-ref '(16 8 4 3 2 1) density_controller)))
