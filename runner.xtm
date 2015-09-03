@@ -200,7 +200,9 @@
       (if (> time (now))
           (if (and (> time (vector-ref notes pitch))
                    (> duration 500.0))
-              (let ((dur (if (> duration (* 2. *second*)) (* 2. *second*) duration))) 
+              (let ((dur (if (> duration (* 2. *second*)) (* 2. *second*) duration)))
+                (record_midi_msg (real->integer time) *midi-note-on* 13 (real->integer pitch) (real->integer velocity))
+                (record_midi_msg (real->integer (+ time dur)) *midi-note-off* 13 (real->integer pitch) (real->integer velocity))
                 ;; (println 'dur: dur 'pitch: pitch)
                 (callback time 'midi_send device *midi-note-on* channel pitch velocity)
                 (callback (+ time dur) 'midi_send device *midi-note-off* channel pitch velocity))))
@@ -222,6 +224,7 @@
 
 (define play-midi-cc
   (lambda (time device cc val channel)
+    (record_midi_msg (real->integer time) *midi-cc* (real->integer cc) (real->integer velocity))    
     (callback (real->integer time) 'midi_send device *midi-cc* (real->integer channel) (real->integer cc) (real->integer val))))
 
 (bind-func print_chunk_notes
