@@ -821,6 +821,59 @@
 (bind-val MidiMSGBufferIdx i64 0)
 (bind-val MidiMSGBufferStartTime i64 0)
 
+(bind-func cim_save_midi_buffer
+  (lambda (filename)
+    (let ((fp (fopen filename "w"))
+          (idx:i64* (salloc 1)))
+      (pset! idx 0 MidiMSGBufferIdx)
+      (if (null? fp)
+          (begin (println "Failed to open file" (Str filename))
+                 -1)
+          (let ((data (cast MidiMSGBuffer i8*))
+                (pos1 (ptrtoi64 (cast (aref-ptr MidiMSGBuffer 0))))
+                (pos2 (ptrtoi64 (cast (aref-ptr MidiMSGBuffer 1))))
+                (size (- pos2 pos1)))
+            (if (< (fwrite (cast idx i8*) 8 1 fp) 0)
+                (begin
+                  (fclose fp)
+                  (println "Failed to write to " (Str filename))
+                  -1)
+                (if (< (fwrite data size MidiMSGBufferIdx fp) 0)
+                    (begin
+                      (fclose fp)
+                      (println "Failed to write to " (Str filename))
+                      -1)
+                    (begin
+                      (fclose fp)
+                      1))))))))
+
+(bind-func cim_load_midi_buffer
+  (lambda (filename)
+    (let ((fp (fopen filename "r"))
+          (idx:i64* (salloc 1)))
+      (if (null? fp)
+          (begin (println "Failed to open file" (Str filename))
+                 -1)
+          (let ((data (cast MidiMSGBuffer i8*))
+                (pos1 (ptrtoi64 (cast (aref-ptr MidiMSGBuffer 0))))
+                (pos2 (ptrtoi64 (cast (aref-ptr MidiMSGBuffer 1))))
+                (size (- pos2 pos1)))
+            (if (= (fread (cast idx) 8 1 fp) 8)
+                (begin
+                  (fclose fp)
+                  (println "Failed to load from " (Str filename))
+                  -1)
+                (if (= (fread data size (pref idx 0) fp) (* size (pref idx 0)))
+                    (begin
+                      (fclose fp)
+                      (println "Failed to load from " (Str filename))
+                      -1)
+                    (begin
+                      (set! MidiMSGBufferIdx (pref idx 0))
+                      (fclose fp)
+                      1))))))))
+
+
 (bind-func last_midi_msg
   (lambda ()
     (if (= 0 MidiMSGBufferIdx) null
@@ -962,7 +1015,7 @@
 
 ;; where timea and timeb are limits for startime not endtime
 (bind-func midi_playback_a
-  (lambda (time device:i8* timea timeb control_only:i1)
+  (lambda (time device:i8* timea timeb control_only:i1 force_chan_0:i1)
     (let ((startmsg (find_midi_msg timea (+ timea 0.1)))
           (endmsg (find_midi_msg timeb (+ timeb 0.1))))
       (println startmsg "--" endmsg)
@@ -984,35 +1037,44 @@
                   (callback (+ (dtoi64 (* CIMSRd (midi_msg_onset msg))) time starttime) midi_send_dat
                             device
                             (midi_msg_type msg)
-                            (i32toi8 (midi_msg_channel msg))
+                            (if force_chan_0 0:i8 (i32toi8 (midi_msg_channel msg)))
                             (i32toi8 (midi_msg_a msg))
-                            (i32toi8(midi_msg_b msg)))))
+                            (i32toi8 (midi_msg_b msg)))))
             void)))))
 
+
 (bind-func midi_playback_b
-  (lambda (time device timea control_only)
+  (lambda (time device timea control_only force_chan_0)
     (midi_playback_a time device timea
                      (midi_msg_onset (last_midi_msg))
-                     control_only)))
+                     control_only force_chan_0)))
 
 (bind-func midi_playback_c
+  (lambda (time device control_only force_chan_0)
+    (midi_playback_a time device
+                     (midi_msg_onset (retrieve_midi_msg 0))
+                     (midi_msg_onset (last_midi_msg))
+                     control_only force_chan_0)))
+
+(bind-func midi_playback_d
   (lambda (time device control_only)
     (midi_playback_a time device
                      (midi_msg_onset (retrieve_midi_msg 0))
                      (midi_msg_onset (last_midi_msg))
-                     control_only)))
+                     control_only #f)))
 
-(bind-func midi_playback_d
+(bind-func midi_playback_e
   (lambda (time device)
     (midi_playback_a time device
                      (midi_msg_onset (retrieve_midi_msg 0))
                      (midi_msg_onset (last_midi_msg))
-                     #f)))
+                     #f #f)))
 
 (bind-poly midi_playback midi_playback_a)
 (bind-poly midi_playback midi_playback_b)
 (bind-poly midi_playback midi_playback_c)
 (bind-poly midi_playback midi_playback_d)
+(bind-poly midi_playback midi_playback_e)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
