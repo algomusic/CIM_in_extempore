@@ -450,14 +450,16 @@
 
 (define reset_buffers
   (lambda ()
-    (println "RESET BUFFERS")
+    (set! pitch-list '())    
+    (note_buffer_reset)    
+    (midi_msg_buffer_reset)
     (if *osc:on*
         (begin
-          (io:osc:send (now) addy1 "/CIMdisplay/flushLED" 1)
-          (io:osc:send (+ (now) 25000) addy1 "/CIMdisplay/flushLED" 0)))
-    (set! pitch-list '())
-    (note_buffer_reset)
-    (midi_msg_buffer_reset)))
+          (let ((num (num_chunks_b gap 0 0)))
+            (io:osc:send (*metro* beat) addy1 "/CIMdisplay/segs" (number->string num))
+            (io:osc:send (now) addy1 "/CIMdisplay/flushLED" 1)
+            (io:osc:send (+ (now) 25000) addy1 "/CIMdisplay/flushLED" 0))))
+    (println "RESET BUFFERS")))
 
 (reset_buffers)
 

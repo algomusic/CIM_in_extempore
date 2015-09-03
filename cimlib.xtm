@@ -4,9 +4,10 @@
 ;;
 ;; Top Level Functions callable from scheme
 ;; 
-;; current_bpm     
+;; current_bpm
 ;; current_key
 ;; current_density
+;; current_avg_velocity
 ;; current-pcs (a scheme wrapper for current_pcs)
 ;;
 ;; cim pedal 1 = analysis
@@ -1676,6 +1677,32 @@
           0.0
           val))))
 
+;; 
+;; basic velocity analysis
+;;
+(bind-func velocity_analysis
+  (let ((velocities:|30,i64|* (alloc))
+        (times:|30,i64|* (alloc))
+        (num 0) (avg 0) (avg2 0) (idx 0))
+    (lambda (time:i64 time_window:i64 note:CIMNote*)
+      (aset! velocities idx (cim_note_volume note))
+      (aset! times idx time)
+      (set! avg2 0) (set! num 0)
+      (dotimes (i 30)
+        (if (< (- time (aref times i)) time_window)
+            (begin
+              (set! num (+ num 1))
+              (set! avg2 (+ avg2 (aref velocities i))))))
+      (set! avg (/ avg2 num))
+      (set! idx (+ idx 1))
+      (if (>= idx 30)
+          (set! idx 0))
+      void)))
+
+(bind-func current_avg_veclocity
+  (lambda ()
+    (velocity_analysis.avg)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; Currently active notes and PCS
@@ -1735,6 +1762,7 @@
           (pulse_analysis time)
           (key_analysis note)
           (density_analysis time (dtoi64 (* 2.0 CIMSRd)))
+          (velocity_analysis time (dtoi64 ( 2.0 CIMSRd)) note)
           void))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
