@@ -18,6 +18,9 @@
 (define with-sustain? (if (or (string=? "" (sys:cmdarg "sustain"))
                               (string=? "0" (sys:cmdarg "sustain")))
                           #f #t))
+(define with-midicc? (if (or (string=? "" (sys:cmdarg "midicc"))
+                              (string=? "0" (sys:cmdarg "midicc")))
+                          #f #t))
 
 ;;(sys:load "../CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/contrib/cimlib.xtm")
@@ -26,6 +29,7 @@
 
 (println "Sustain playback is: " with-sustain?)  
 (println "Local audio playback is: " with-dsp?)
+(println "CC playback?: " with-cc-msgs?)
 
 ;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -235,9 +239,9 @@
     ;; (find_random_chunk_a 1.5 0.0 0 0 0.0 10000.0)
     (let* (;(chunk (find_random_chunk_a gap (if (> *polyphony* 2) -10.0 0.0) 0 0 1.0 (* 2.0 dcontrol))) ;;1000.0))
            (last_idx (cim_note_index (last_note)))
-           ;(lllll (println 'last_note_index: last_idx))
+                                        ;(lllll (println 'last_note_index: last_idx))
            (num (num_chunks_b gap 0 0))
-           ;(lllllll (println 'num: num))
+                                        ;(lllllll (println 'num: num))
            (chunk (find_random_chunk_a gap 0.0 0 0 0.0 (* 2. dcontrol)))
            (chunkkey (cim_chunk_key chunk))
            (cmaj? (if (= 1 (cim_key_major chunkkey)) #t #f))
@@ -268,44 +272,50 @@
       ;;(println 'got-pitches)
       (if (= (cim_chunk_valid chunk) 1)
           (dotimes (i size)
-            (if (and (< (real->integer (list-ref pitch-list i)) 0) note-not-played?)
-              (begin 
-                (play-midi-cc (now) *midi-out* (* -1 (list-ref pitch-list i)) (cim_chunk_note_volume chunk i) 0))
-              (if (>= (real->integer (list-ref pitch-list i)) 0) ;; manage contoller data (negative data a values)
-                (begin 
-                  (if note-not-played? (set! last-onset (* -1 (cim_chunk_note_onset chunk i))))
-                  (set! note-not-played? #f)
-                  (let* ((os (cim_chunk_note_onset chunk i))
-                         (mm (modulo os 0.125))
-                         (mm2 (if (< mm .05) mm
-                                  (if (> mm .1) (- mm .125)
-                                      0.0))))
-                    ;; (println 'note: (cim_chunk_note_pitch chunk i)
-                    ;;          'beats: (cim_chunk_note_beats chunk i)
-                    ;;          'dur: (cim_chunk_note_duration chunk i))
+            (if (and with-midicc? (< (real->integer (list-ref pitch-list i)) 0))
+                     ;;note-not-played?)
+                (let ((os (cim_chunk_note_onset chunk i)))
+                  (play-midi-cc (if note-not-played?
+                                    (now)
+                                    (*metro* (+ last-onset os)))
+                                *midi-out*
+                                (* -1 (list-ref pitch-list i))
+                                (cim_chunk_note_volume chunk i) 0))
+                (if (>= (real->integer (list-ref pitch-list i)) 0)
+                    (begin 
+                      (if note-not-played? (set! last-onset (* -1 (cim_chunk_note_onset chunk i))))
+                      (set! note-not-played? #f)
+                      (let* ((os (cim_chunk_note_onset chunk i))
+                             (mm (modulo os 0.125))
+                             (mm2 (if (< mm .05) mm
+                                      (if (> mm .1) (- mm .125)
+                                          0.0))))
+                        ;; (println 'note: (cim_chunk_note_pitch chunk i)
+                        ;;          'beats: (cim_chunk_note_beats chunk i)
+                        ;;          'dur: (cim_chunk_note_duration chunk i))
 
-                    ;; (println 'onset: os mm (- os mm2) mm2)
-                    
-                    ;; (play (+ 0.0 last-onset (if (< os .11) os (- os mm2))) fmsynth
-                    ;;       ;(+ 12 (list-ref pitch-list i))
-                    ;;        (pc:quantize (real->integer (+ 12 (- key ckey)
-                    ;;                                      (list-ref pitch-list i)))
-                    ;;                     scale)                          
-                    ;;       (* 1.0 (cim_chunk_note_volume chunk i))
-                    ;;       (* .7 (cim_chunk_note_duration chunk i)) 1.0 0.5)
-                    (hplay (+ 0.0 last-onset (if (< os .11) os (- os mm2)))
-                           inst
-                           ;(list-ref pitch-list i)
-                           (pc:quantize (real->integer (+ (- key ckey)
-                                                         (list-ref pitch-list i)))
-                                        scale)
-                           (+ (cim_chunk_note_volume chunk i) (random -15 15))
-                           (cim_chunk_note_duration chunk i))))
-                (begin
-                  (if (> dcontrol 2)
-                      (play-midi-cc (*metro* (+ (cim_chunk_note_onset chunk i) beat last-onset)) 
-                                    *midi-out* (* -1 (list-ref pitch-list i)) (cim_chunk_note_volume chunk i) 0))
-                  ))))))))
+                        ;; (println 'onset: os mm (- os mm2) mm2)
+                        
+                        ;; (play (+ 0.0 last-onset (if (< os .11) os (- os mm2))) fmsynth
+                        ;;       ;(+ 12 (list-ref pitch-list i))
+                        ;;        (pc:quantize (real->integer (+ 12 (- key ckey)
+                        ;;                                      (list-ref pitch-list i)))
+                        ;;                     scale)                          
+                        ;;       (* 1.0 (cim_chunk_note_volume chunk i))
+                        ;;       (* .7 (cim_chunk_note_duration chunk i)) 1.0 0.5)
+
+                        (hplay (+ 0.0 last-onset (if (< os .11) os (- os mm2)))
+                               inst
+                               (pc:quantize (real->integer (+ (- key ckey)
+                                                              (list-ref pitch-list i)))
+                                            scale)
+                               (+ (cim_chunk_note_volume chunk i) (random -15 15))
+                               (cim_chunk_note_duration chunk i))))
+                    (begin
+                      (if (> dcontrol 2)
+                          (play-midi-cc (*metro* (+ (cim_chunk_note_onset chunk i) beat last-onset)) 
+                                        *midi-out* (* -1 (list-ref pitch-list i)) (cim_chunk_note_volume chunk i) 0))
+                      ))))))))
 
 ;; (define test)
 ;;   (let ((cnt 0) (allowreset #t))
