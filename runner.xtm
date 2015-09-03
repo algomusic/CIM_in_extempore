@@ -22,6 +22,10 @@
                               (string=? "0" (sys:cmdarg "midicc")))
                           #f #t))
 
+(define with-osc? (if (or (string=? "" (sys:cmdarg "osc"))
+                              (string=? "0" (sys:cmdarg "osc")))
+                          #f #t))
+
 ;;(sys:load "../CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/contrib/cimlib.xtm")
 (sys:load "libs/core/pc_ivl.xtm")
@@ -37,7 +41,7 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;
 
-(define *osc:on* #f)
+(define *osc:on* with-osc?)
 
 (if *osc:on* (io:osc:start-server 9000 "osc-receive-9000"))
 
