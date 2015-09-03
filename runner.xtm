@@ -464,8 +464,7 @@
 (define reset_buffers
   (lambda ()
     (set! pitch-list '())    
-    (note_buffer_reset)    
-    (midi_msg_buffer_reset)
+    (note_buffer_reset)
     (if *osc:on*
         (begin
           (let ((num (num_chunks_b gap 0 0)))
