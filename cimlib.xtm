@@ -1745,7 +1745,7 @@
 (bind-func velocity_analysis
   (let ((velocities:|30,i64|* (alloc))
         (times:|30,i64|* (alloc))
-        (num 0) (avg 0) (avg2 0) (idx 0))
+        (num 0) (avg 0) (avg2 0) (idx 0) (i 0))
     (lambda (time:i64 time_window:i64 note:CIMNote*)
       (aset! velocities idx (cim_note_volume note))
       (aset! times idx time)
@@ -1761,7 +1761,7 @@
           (set! idx 0))
       void)))
 
-(bind-func current_avg_veclocity
+(bind-func current_avg_velocity:[i64]*
   (lambda ()
     (velocity_analysis.avg)))
 

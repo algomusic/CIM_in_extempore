@@ -29,7 +29,7 @@
 
 (println "Sustain playback is: " with-sustain?)  
 (println "Local audio playback is: " with-dsp?)
-(println "CC playback?: " with-cc-msgs?)
+(println "CC playback?: " with-midicc?)
 
 ;;;;;;;;;;;;;;;;;;;;;;
 ;;
