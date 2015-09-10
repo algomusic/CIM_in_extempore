@@ -185,9 +185,16 @@
           ((1 2) 
             (set! pitch-list (map (lambda (i) (if (> i 48) (+ i (random -3 4)) i)) lst))) ;; jitter
           ((3) (let ((trans (random '(12 -12 7 -5)))) ;; transpose and jitter a bit
-            (set! pitch-list (map (lambda (i) (if (> i 48) (+ i trans (random -1 2)) i)) lst)))))))))
+            (set! pitch-list (map (lambda (i) (if (> i 48) (+ i trans (random -1 2)) i)) lst))))))
+      ;; constrain to 88 note piano range
+      (set! pitch-list (map (lambda (i) 
+                              (if (> i 120) (- i 24) i)
+                              (if (> i 108) (- i 12) i) 
+                              (if (< i 9) (+ i 24) i)                 
+                              (if (< i 21) (+ i 12) i)) lst)))))
 
     ;(set! pitch-list (map (lambda (i) (if (>= i 0) 60 i)) lst))))
+
 
 ;;(transform-pitches pitch-list)
 
@@ -251,7 +258,8 @@
                                         ;(lllll (println 'last_note_index: last_idx))
            (num (num_chunks_b gap 0 0))
                                         ;(lllllll (println 'num: num))
-           (chunk (find_random_chunk_a gap 0.0 0 0 0.0 (* 2. dcontrol)))
+           ;gap homophonic startidx endidx upper lower (duration in beats)
+           (chunk (find_random_chunk_a gap 0.0 0 0 0.0 (* 2. dcontrol))) 
            (chunkkey (cim_chunk_key chunk))
            (cmaj? (if (= 1 (cim_key_major chunkkey)) #t #f))
            (ckey (cim_key_root chunkkey))
