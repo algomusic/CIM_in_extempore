@@ -177,7 +177,7 @@
   (lambda (lst chnkKey)
     (if (and (not (null? lst))
               (cl:find-if (lambda (x) (>= x 0)) lst))
-      (begin ;(println lst)
+      (begin (println lst)
         (case (random 4)
           ((0) (set! pitch-list lst)) ;; no change
           ((1) (let ((p1 (car (cl:remove-if (lambda (x) (< x 0)) lst)))) ;; invert

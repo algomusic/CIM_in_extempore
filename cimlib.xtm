@@ -1871,10 +1871,10 @@
                             (set! CIMNoteBufferIdx (- CIMNoteBufferIdx 1))))
                       void)
                     (begin
-                      (cond ((= a 4:i8) (cim_set_pedal 1 (i8toi64 b)) void)
-                            ((= a 5:i8) (cim_set_pedal 2 (i8toi64 b)) void)
-                            ((= a 3:i8) (cim_set_pedal 4 (i8toi64 b)) void)
-                            ((= a 2:i8) (cim_set_pedal 5 (i8toi64 b)) void)            
+                      (cond ((= a 2:i8) (cim_set_pedal 1 (i8toi64 b)) void) ;; analysis 1
+                            ((= a 3:i8) (cim_set_pedal 2 (i8toi64 b)) void) ;; record 2
+                            ((= a 5:i8) (cim_set_pedal 4 (i8toi64 b)) void) ;; flush 4
+                            ((= a 4:i8) (cim_set_pedal 5 (i8toi64 b)) void) ;; panic 5
                             (else void))
                       void)))
             (if (= type MIDI_CC)
@@ -1885,23 +1885,23 @@
                              (record_note t type (convert chan) (convert a) (convert b))
                              void)
                            void))
-                      ((= a 66:i8)
-                       (cim_set_pedal 4 (i8toi64 b))
+                      ((= a 66:i8) ;; middle piano pedal
+                       (cim_set_pedal 1 (i8toi64 b)) ;; analyse
                        void)
-                      ((= a 67:i8)
-                       (cim_set_pedal 5 (i8toi64 b))
+                      ((= a 67:i8) ;; left piano pedal
+                       (cim_set_pedal 2 (i8toi64 b)) ;; record
                        void)
                       ((= a 68:i8)
-                       (cim_set_pedal 1 (i8toi64 b))
+                       (cim_set_pedal 1 (i8toi64 b)) ;; analyse
                        void)
                       ((= a 69:i8)
-                       (cim_set_pedal 2 (i8toi64 b))
+                       (cim_set_pedal 2 (i8toi64 b)) ;; rec
                        void)
                       ((= a 10:i8) ;; 10 and 21 the same
-                       (cim_set_pedal 3 (i8toi64 b))
+                       (cim_set_pedal 3 (i8toi64 b)) 
                        void)
-                      ((= a 7:i8) ;; 10 and 21 the same
-                       (cim_set_pedal 3 (i8toi64 b))
+                      ((= a 7:i8) ;; 10 and 21 the same 
+                       (cim_set_pedal 3 (i8toi64 b)) ;; density 3
                        void)
                       ((= a 21:i8) ;; 10 and 21 the same
                        (cim_set_pedal 3 (i8toi64 b))
