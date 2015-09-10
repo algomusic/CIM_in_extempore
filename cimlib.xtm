@@ -48,6 +48,11 @@
 (bind-val CIM_GLOBAL_BPM_CONFIDENCE i64 0)
 (bind-val CIM_GLOBAL_BPM_CONFIDENCE_WEIGHT i64 18)
 
+(bind-func cim_bpm_confidence_weight
+  (lambda (num)
+    (set! CIM_GLOBAL_BPM_CONFIDENCE_WEIGHT num)
+    void))
+
 (bind-func current_bpm_confidence
   (lambda ()
     (clamp (/ (i64tod CIM_GLOBAL_BPM_CONFIDENCE)
@@ -245,6 +250,10 @@
     (if (= 0 CIMNoteBufferIdx) null
         (aref-ptr CIMNoteBuffer (- CIMNoteBufferIdx 1)))))
 
+(bind-func last_note_index
+  (lambda ()
+    (- CIMNoteBufferIdx 1)))
+
 (bind-func note_buffer_reset
   (lambda ()
     ;;(memset (cast CIMNoteBuffer) 0 (* 1000000 40))
@@ -287,6 +296,18 @@
 
 ;; valid, start note, finish note, size, onset, duration, bpm, homophonic(%)
 (bind-type CIMChunk <i1,CIMNote*,CIMNote*,i64,double,double,double,double>)
+
+(bind-func cim_chunk_copy
+  (lambda (c1:CIMChunk* c2:CIMChunk*)
+    (tfill! c2
+            (tref c1 0)
+            (tref c1 1)
+            (tref c1 2)
+            (tref c1 3)
+            (tref c1 4)
+            (tref c1 5)
+            (tref c1 6)
+            (tref c1 7))))
 
 (bind-func cim_chunk_valid
   (lambda (chunk:CIMChunk*)
@@ -703,6 +724,130 @@
 
 (bind-poly dump_chunks dump_chunks_a)
 (bind-poly dump_chunks dump_chunks_b)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; CHUNK Database
+;;
+
+;; startnote idx,endnot idx,num,size,chunks
+;; startnote will be fixed with first insert.
+;; endnote will move for every new insert.
+(bind-type ChunkDB <i64,i64,i64,i64,CIMChunk*>)
+
+(bind-func cim_db_setend
+  (lambda (db:ChunkDB* endidx)
+    (tset! db 1 endidx)))
+
+(bind-func cim_db_end
+  (lambda (db:ChunkDB*)
+    (tref db 1)))
+
+(bind-func cim_db_size
+  (lambda (db:ChunkDB*)
+    (tref db 3)))
+
+(bind-func cim_db_num
+  (lambda (db:ChunkDB*)
+    (tref db 2)))
+
+(bind-func cim_db_increment
+  (lambda (db)
+    (tset! db 2 (+ 1 (cim_db_num db)))
+    (cim_db_num db)))
+
+(bind-func cim_db_chunks
+  (lambda (db:ChunkDB*)
+    (tref db 4)))
+
+(bind-func cim_db_create
+  (lambda (size)
+    (let ((chunks (halloc size)))
+      (ChunkDB 0 0 0 size chunks))))
+
+(bind-func cim_db_destroy
+  (lambda (db:ChunkDB*)
+    (free (cim_db_chunks db))
+    void))
+
+(bind-func print_CIMDB
+  (lambda (db)
+    (println "<DB chunks:" (cim_db_num db) ">")
+    void))
+
+(bind-poly print print_CIMDB)
+
+;; copy from db1 into db2
+(bind-func cim_db_copy
+  (lambda (db1:ChunkDB* db2:ChunkDB*)
+    (if (< (cim_db_num db1) (cim_db_size db2))
+        (let ((chunks1 (cim_db_chunks db1))
+              (chunks2 (cim_db_chunks db2)))
+          (doloop (i (cim_db_num db1))
+            (cim_chunk_copy (pref-ptr chunks1 i)
+                            (pref-ptr chunks2 i)))
+          #t)
+        #f)))
+
+;; expand existing db (in place)
+(bind-func cim_db_expand
+  (lambda (db size)
+    (let ((newsize (+ (cim_db_size db) size))
+          (chunks1 (cim_db_chunks db))
+          (chunks2 (halloc newsize)))
+      (doloop (i size)
+        (cim_chunk_copy (pref-ptr chunks1 i)
+                        (pref-ptr chunks2 i)))
+      (tset! db 3 newsize)
+      (tset! db 4 chunks2)
+      (free chunks1)
+      void)))
+
+(bind-func cim_db_next_free_chunk
+  (lambda (db)
+    (if (< (cim_db_num db) (cim_db_size db))
+        (pref-ptr (cim_db_chunks db) (cim_db_num db))
+        (begin
+          (cim_db_expand db 100)
+          (pref-ptr (cim_db_chunks db) (cim_db_num db))))))
+
+;; insert new chunk
+;; and return number of chunks in db
+(bind-func cim_db_insert
+  (lambda (db:ChunkDB* chunk:CIMChunk*)
+    (cim_chunk_copy chunk (cim_db_next_free_chunk db))
+    (cim_db_setend db (cim_chunk_end_index chunk))
+    (cim_db_increment db)))
+
+(bind-func cim_db_find_chunk_a
+  (lambda (db index)
+    (if (< index (cim_db_num db))
+        (pref-ptr (cim_db_chunks db) index)
+        null)))
+
+(bind-func cim_db_update_a
+  (lambda (db gap)
+    (let ((idx (cim_db_end db)) (i 0)
+          (lastidx (last_note_index))
+          (chunk null)
+          (num (num_chunks_b gap (+ idx 1) lastidx)))
+      (dotimes (i num)
+        (set! chunk (find_chunk_a num gap (+ idx 1) lastidx))
+        (if (not (null? chunk))
+            (cim_db_insert db chunk)))
+      (cim_db_num db))))
+
+(bind-func cim_db_update_b
+  (lambda (db)
+    (cim_db_update_a db CIMDefaultGapSize)))
+
+(bind-poly cim_db_update cim_db_update_a)
+(bind-poly cim_db_update cim_db_update_b)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
 
 (bind-func record_note
   (lambda (time type chan:i8 a b)
