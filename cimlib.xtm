@@ -1379,17 +1379,19 @@
     (lambda ()
       (set! firstm 0) (set! firsti 0) (set! secondm 0) (set! secondi i) (set! idx 0)
       (dotimes (i NumRhythmBins)
-        (if (> (aref rhythmbins i) secondm)
-            (begin (set! secondi i)
-                   (set! secondm (aref rhythmbins i))))
+        ;;(println "bin" i (aref rhythmbins i))
         (if (> (aref rhythmbins i) firstm)
             (begin
+              ;;(println "first" i NumRhythmBins firstm)
               (set! secondi firsti)
               (set! secondm firstm)              
               (set! firstm (aref rhythmbins i))
               (set! firsti i)
-              (set! idx i))))
-      ;;(printout "first: [" firsti "," firstm "] second: [" secondi "," secondm "]\n")      
+              (set! idx i))
+            (if (> (aref rhythmbins i) secondm)
+              (begin (set! secondi i)
+                     (set! secondm (aref rhythmbins i))))))
+      ;(printout "first: [" firsti "," firstm "] second: [" secondi "," secondm "]\n")      
       (set! firstbpm (+ bpm_low (* (i64tod firsti) bpm_mod)))
       (set! secondbpm (+ bpm_low (* (i64tod secondi) bpm_mod)))
       (set! weight (if (= 0 firstm) 1.0 (/ (i64tod secondm) (i64tod firstm))))
@@ -1404,7 +1406,8 @@
             (dotimes (i NumRhythmBins)
               (aset! rhythmbins i 0))
             (aset! rhythmbins idx 3)))
-      (if (> (fabs (- current_bpm bpm)) 2.0)
+      (if (and (> (fabs (- current_bpm bpm)) 2.0)
+               (> firstm 1))
           (begin
             (set! CIM_GLOBAL_BPM_CONFIDENCE 0)
             ;;(println "changing bpm: " current_bpm " to " bpm)
@@ -1418,7 +1421,7 @@
           (begin
             ;;(println "updating global metro " CIM_GLOBAL_BPM " ... ")
             (set! CIM_GLOBAL_BPM current_bpm)))
-      ;;(print_rhythm_bins)
+      ;(print_rhythm_bins)
       (dtoi64 CIM_GLOBAL_BPM))))
 
 (bind-func bpm_analysis
@@ -2089,8 +2092,6 @@
           (bpm_analysis note)
           (pulse_analysis time)
           (key_analysis note)
-          (density_analysis time (dtoi64 (* 2.0 CIMSRd)))
-          (velocity_analysis time (dtoi64 ( 2.0 CIMSRd)) note)
           void))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -2132,6 +2133,10 @@
                       (set! idx (record_note t type (convert chan) (convert a) (convert b)))
                       (set! note (retrieve_note idx))
                       (if (> (cim_get_pedal 1) 30) (analysis t note))
+                      ;; always do these two analysis
+                      (density_analysis t (dtoi64 (* 2.0 CIMSRd)))
+                      (if (not (null? note))
+                          (velocity_analysis t (dtoi64 ( 2.0 CIMSRd)) note))
                       (if (and (> idx -1) (= (cim_get_pedal 2) 0))
                           (begin
                             (set! CIMNoteBufferIdx (- CIMNoteBufferIdx 1))))
@@ -2152,6 +2157,13 @@
                              void)
                            void))
                       ((= a 66:i8) ;; middle piano pedal
+                        (if (= (cim_get_pedal 1) 0)
+                            (begin 
+                              (println "Release Bins" (cim_get_pedal 1) (dtoi64 (/ (- CIM_GLOBAL_BPM bpm_low) bpm_mod)))
+                              (release_bpm_bins)
+                              (set! CIM_GLOBAL_BPM_CONFIDENCE 0)
+                              ;;(aset! rhythmbins (dtoi64 (/ (- CIM_GLOBAL_BPM bpm_low) bpm_mod)) 2)
+                              ))
                        (cim_set_pedal 1 (i8toi64 b)) ;; analyse
                        void)
                       ((= a 67:i8) ;; left piano pedal
