@@ -38,6 +38,69 @@
 (bind-val CIMSR i64 44100)
 ;; (bind-val CIMSRd double (integer->real *au:samplerate*))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; helpers for scheme
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(bind-type CIMf64Array <i64,double*>)
+
+(bind-func cim_f64_create
+  (lambda (size)
+    (let ((v:double* (halloc size)))
+      (CIMf64Array size v))))
+
+(bind-func cim_f64_size
+  (lambda (a:CIMf64Array*)
+    (tref a 0)))
+    
+(bind-func cim_f64_destroy
+  (lambda (a:CIMf64Array*)
+    (free (tref a 1))
+    void))
+
+(bind-func cim_f64_get
+  (lambda (a:CIMf64Array* idx)
+    (pref (tref a 1) (% idx (tref a 0)))))
+
+(bind-func cim_f64_set
+  (lambda (a:CIMf64Array* idx value)
+    (pset! (tref a 1) (% idx (tref a 0)) value)))
+
+(bind-func cim_f64_create
+  (lambda (size)
+    (let ((v:double* (halloc size)))
+      (CIMf64Array size v))))
+
+(bind-type CIMi64Array <i64,i64*>)
+
+(bind-func cim_i64_create
+  (lambda (size)
+    (let ((v:i64* (halloc size)))
+      (CIMi64Array size v))))
+
+(bind-func cim_i64_size
+  (lambda (a:CIMi64Array*)
+    (tref a 0)))
+    
+(bind-func cim_i64_destroy
+  (lambda (a:CIMi64Array*)
+    (free (tref a 1))
+    void))
+
+(bind-func cim_i64_get
+  (lambda (a:CIMi64Array* idx)
+    (pref (tref a 1) (% idx (tref a 0)))))
+
+(bind-func cim_i64_set
+  (lambda (a:CIMi64Array* idx value)
+    (pset! (tref a 1) (% idx (tref a 0)) value)))
+
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; GLOBALS
@@ -438,6 +501,53 @@
           (note (retrieve_note (+ sidx idx))))
       (cim_note_volume note))))
 
+(bind-func cim_chunk_note_pitches
+  (lambda (chunk:CIMChunk*)
+    (let ((num (cim_chunk_size chunk))
+          (i 0)
+          (a (cim_i64_create num)))
+      (dotimes (i num)
+        (cim_i64_set a i (cim_chunk_note_pitch chunk i)))
+      a)))
+
+(bind-func cim_chunk_note_volumes
+  (lambda (chunk:CIMChunk*)
+    (let ((num (cim_chunk_size chunk))
+          (i 0)
+          (a (cim_i64_create num)))
+      (dotimes (i num)
+        (cim_i64_set a i (cim_chunk_note_volume chunk i)))
+      a)))
+
+(bind-func cim_chunk_note_durations
+  (lambda (chunk:CIMChunk*)
+    (let ((num (cim_chunk_size chunk))
+          (i 0)
+          (a (cim_f64_create num)))
+      (dotimes (i num)
+        (cim_f64_set a i (cim_chunk_note_duration chunk i)))
+      a)))
+
+;; I know beatss ;)
+(bind-func cim_chunk_note_beatss
+  (lambda (chunk:CIMChunk*)
+    (let ((num (cim_chunk_size chunk))
+          (i 0)
+          (a (cim_f64_create num)))
+      (dotimes (i num)
+        (cim_f64_set a i (cim_chunk_note_beats chunk i)))
+      a)))
+
+(bind-func cim_chunk_note_onsets
+  (lambda (chunk:CIMChunk*)
+    (let ((num (cim_chunk_size chunk))
+          (i 0)
+          (a (cim_f64_create num)))
+      (dotimes (i num)
+        (cim_f64_set a i (cim_chunk_note_onset chunk i)))
+      a)))
+
+
 (bind-func CIMChunk_print:[void,CIMChunk*]*
   (lambda (chunk)
     (if (null? chunk)
@@ -825,6 +935,17 @@
     (if (< index (cim_db_num db))
         (pref-ptr (cim_db_chunks db) index)
         null)))
+
+(bind-func cim_db_find_chunk_b
+  (lambda (db d1 d2)
+    (let ((i 0) (d3 0.0) (res null))
+      (while (< i (cim_db_num db))
+        (set! d3 (cim_chunk_duration (cim_db_find_chunk_a db i)))
+        (if (and (> d3 d1) (< d3 d2))
+            (begin (set! res (cim_db_find_chunk_a db i))
+                   (set! i 10000000000)))
+        (set! i (+ i 1)))
+      res)))
 
 (bind-func cim_db_update_a
   (lambda (db gap)

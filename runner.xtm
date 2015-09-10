@@ -107,6 +107,102 @@
 ;; (bind-poly note_playback note_playback_a)
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; cim array helpers
+
+
+(define cim_f64->list
+  (lambda (a)
+    (let ((size (cim_f64_size a))
+          (lst (make-list-with-proc
+                size
+                (lambda (i)
+                  (cim_f64_get a i)))))
+      lst)))
+
+(define list->cim_f64
+  (lambda (l)
+    (let ((size (length l))
+          (a (cim_f64_create size)))
+      (for-each (lambda (x i)
+                  (cim_f64_set a i (* 1.0 x)))
+                l)
+      a)))
+
+(define cim_i64->list
+  (lambda (a)
+    (let ((size (cim_i64_size a))
+          (lst (make-list-with-proc
+                size
+                (lambda (i)
+                  (cim_i64_get a i)))))
+      lst)))
+
+(define list->cim_i64
+  (lambda (l)
+    (let ((size (length l))
+          (a (cim_i64_create size)))
+      (for-each (lambda (x i)
+                  (cim_i64_set a i (real->integer x)))
+                l)
+      a)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; cim chunk helpers
+;;
+
+;; start with a default db
+(define *DB* (list (cim_db_create 100)))
+
+;; get the current db
+(define db
+  (lambda ()
+    (car *DB*)))
+
+;; push a new db onto the stack
+(define push-db
+  (lambda ()
+    (set! *DB* (cons (cim_db_create 100) *DB*))
+    (car *DB*)))
+
+;; pop a db off the stack (probably don't need to do this)
+(define pop-db
+  (lambda ()
+    (if (null? *DB*) *DB*
+        (begin
+          (set! *DB* (cdr *DB*))
+          (if (null? *DB*) *DB*
+              (car *DB*))))))
+
+;; return an old DB (i.e. any db by index)
+(define old-db
+  (lambda (idx)
+    (if (< idx (length *DB*))
+        (list-ref *DB* idx)
+        #f)))
+
+;; updates the *current* db (i.e. (car *DB*))
+(define update-db
+  (lambda ()
+    (cim_db_update_b (car *DB*))))
+
+
+;; where returned list will be
+(define chunk->scm
+  (lambda (chunk)
+    (let ((onsets (cim_f64->list (cim_chunk_onsets chunk)))
+          (durations (cim_f64->list (cim_chunk_durations chunk)))
+          (pitches (cim_i64->list (cim_chunk_pitches chunk)))
+          (volumes (cim_i64->list (cim_chunk_volumes chunk))))
+      (cim_f64_destroy onsets)
+      (cim_f64_destroy durations)
+      (cim_i64_destroy pitches)
+      (cim_i64_destroy volumes)
+      (list onsets pitches volumes durations))))
+
+    
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
