@@ -273,8 +273,9 @@
   (lambda (lst chnkKey)
     (if (and (not (null? lst))
               (cl:find-if (lambda (x) (>= x 0)) lst))
-      (begin (println lst)
-        (case (random 1 1)
+      (let ((choice (random 5)))
+        (print lst 'transform: choice '->)
+        (case choice
           ((0 4) (set! pitch-list lst)) ;; no change
           ((1) (let ((p1 (car (cl:remove-if (lambda (x) (< x 0)) lst)))) ;; invert
                  (set! pitch-list (map (lambda (i) (if (>= i 0) (+ p1 (- p1 i)) i)) lst))))
@@ -285,16 +286,16 @@
                                           ((< p1 48)
                                             '(12 0 7 -5))
                                           (else '(0 2 -2 7 -5 12))))))
-            (set! pitch-list (map (lambda (i) (if (> i 40) (+ i trans (random -2 3)) i)) lst)))))
+                  (set! pitch-list (map (lambda (i) (if (> i 40) (+ i trans (random -2 3)) i)) lst)))))
         ;; constrain to 88 note piano range
         (set! pitch-list (map (lambda (i) 
                               (if (> i 120) (- i 24) i)
                               (if (> i 108) (- i 12) i) 
                               (if (and (>= i 0) (< i 9)) (+ i 24) i)                
-                              (if (and (>= i 0) (< i 21)) (+ i 12) i)) lst))))))
+                              (if (and (>= i 0) (< i 21)) (+ i 12) i)) pitch-list))
+        (println pitch-list)))))
 
     ;(set! pitch-list (map (lambda (i) (if (>= i 0) 60 i)) lst))))
-
 
 ;;(transform-pitches pitch-list)
 
@@ -385,7 +386,7 @@
       ;;(println)
       ;;(println 'scale: scale 'bpm: )
       ;;(print_chunk_notes idx size)
-      
+      ;(get-pitches-from-chunk chunk)
       (transform-pitches (get-pitches-from-chunk chunk) chunkkey)
       ;; transpose into current key if required
       ;;(get-pitches-from-chunk chunk)
@@ -431,7 +432,7 @@
                                             scale)
                                ;;(clamp (+ (* (/ (current_avg_velocity) 64) .5
                                ;;   (+ (cim_chunk_note_volume chunk i))) (random -10 10)) 10 127)
-                               (clamp (+ (random -10 10) (/ (+ (current_avg_velocity) 
+                               (clamp (+ (random 10) (/ (+ (current_avg_velocity) 
                                   (cim_chunk_note_volume chunk i)) 2)) 10 127)
                                (cim_chunk_note_duration chunk i))))
                     (begin
