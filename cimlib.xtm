@@ -2107,7 +2107,7 @@
 (bind-func midi_msg_buffer_receiver
   (let ((idx -1)
         (note:CIMNote* null)
-        (time_of_first_message 0.0))
+        (time_of_first_message 0.0:double))
     (lambda (time:double type:i32 chan:i32 a:i32 b:i32)
       ;; (set! typ (>> (pref msg 0) 4))
       ;; (set! chan (& (pref msg 0) 15))
@@ -2119,13 +2119,13 @@
           (let ((t1 (now))
                 (t2 (dtoi64 (* CIMSRd (- (clock_clock) (audio_clock_base)))))
                 (t:i64 t2))
-            (if CIM_PRINT_MIDI_MESSAGES (println "midi-in" typ chan a b))
-            (record_midi_msg t typ (convert chan) (convert a) (convert b))
+            (if CIM_PRINT_MIDI_MESSAGES (println "midi-in" type chan a b))
+            (record_midi_msg t (i32toi8 type) chan a b)
             (if (or (= type MIDI_NOTE_ON)
                     (= type MIDI_NOTE_OFF))
                 (if (<> chan 1:i32)
                     (begin
-                      (set! idx (record_note t type (convert chan) (convert a) (convert b)))
+                      (set! idx (record_note t type (i32toi8 chan) (i32toi8 a) (i32toi8 b)))
                       (set! note (retrieve_note idx))
                       (if (> (cim_get_pedal 1) 30) (analysis t note))
                       ;; always do these two analysis
@@ -2137,10 +2137,10 @@
                             (set! CIMNoteBufferIdx (- CIMNoteBufferIdx 1))))
                       void)
                     (begin
-                      (cond ((= a 2) (cim_set_pedal 1 (convert b)) void) ;; analysis 1
-                            ((= a 3) (cim_set_pedal 2 (convert b)) void) ;; record 2
-                            ((= a 5) (cim_set_pedal 4 (convert b)) void) ;; flush 4
-                            ((= a 4) (cim_set_pedal 5 (convert b)) void) ;; panic 5
+                      (cond ((= a 2:i32) (cim_set_pedal 1 (convert b)) void) ;; analysis 1
+                            ((= a 3:i32) (cim_set_pedal 2 (convert b)) void) ;; record 2
+                            ((= a 5:i32) (cim_set_pedal 4 (convert b)) void) ;; flush 4
+                            ((= a 4:i32) (cim_set_pedal 5 (convert b)) void) ;; panic 5
                             (else void))
                       void)))
             (if (= type MIDI_CC)
@@ -2148,10 +2148,10 @@
                        (if (> (cim_get_pedal 2) 30)
                           (begin 
                              ;;(println "record midi-cc:" a b)
-                             (record_note t type (convert chan) (convert a) (convert b))
+                             (record_note t type (i32toi8 chan) (i32toi8 a) (i32toi8 b))
                              void)
                            void))
-                      ((= a 66:i8) ;; middle piano pedal
+                      ((= a 66) ;; middle piano pedal
                         (if (= (cim_get_pedal 1) 0)
                             (begin 
                               (println "Release Bins" (cim_get_pedal 1) (dtoi64 (/ (- CIM_GLOBAL_BPM bpm_low) bpm_mod)))
