@@ -15,19 +15,42 @@
 (define with-dsp? (if (or (string=? "" (sys:cmdarg "audio"))
                           (string=? "0" (sys:cmdarg "audio")))
                       #f #t))
+
 (define with-sustain? (if (or (string=? "" (sys:cmdarg "sustain"))
                               (string=? "0" (sys:cmdarg "sustain")))
                           #f #t))
+
 (define with-midicc? (if (or (string=? "" (sys:cmdarg "midicc"))
                               (string=? "0" (sys:cmdarg "midicc")))
                           #f #t))
 
 (define with-osc? (if (or (string=? "" (sys:cmdarg "osc"))
                               (string=? "0" (sys:cmdarg "osc")))
-                          #f #t))
+                      #f #t))
+
+(define midi-out-port 
+  (if (string=? "" (sys:cmdarg "midi-out"))
+      0
+      (string->number (sys:cmdarg "midi-out"))))
+
+(define midi-in-port 
+  (if (string=? "" (sys:cmdarg "midi-in"))
+      0
+      (string->number (sys:cmdarg "midi-in"))))
+
+;; 
+(println "MIDI out port is" midi-out-port "MIDI in port is" midi-in-port)
+
+;; midi initialization first!
+;; cimlib overloads certain midi input funcs
+(sys:load "libs/external/midi_input.xtm")
+
+(set_midi_in midi-in-port)
+
+(define *midi_out* (pm_create_output_stream midi-out-port))
 
 ;;(sys:load "../CIM_in_extempore/cimlib.xtm")
-(sys:load "libs/contrib/cimlib.xtm")
+(sys:load "../CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/core/pc_ivl.xtm")
 (if with-dsp? (sys:load "libs/external/instruments_ext.xtm"))
 
@@ -57,7 +80,7 @@
 ;; utilities
 (define panic
   (lambda (device)
-    (midi_send device *midi-cc* 0 64 0)
+    (pm_send device *midi-cc* 0 64 0)
   	(dotimes (c 16)
   		(dotimes (i 127)
     		(midi_send device 8 c i 0)))))
@@ -203,40 +226,6 @@
       (list onsets pitches volumes durations))))
 
     
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-;; init midi stuff
-;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(define midi-out-port 
-  (if (string=? "" (sys:cmdarg "midi-out"))
-      0
-      (string->number (sys:cmdarg "midi-out"))))
-
-(define midi-in-port 
-  (if (string=? "" (sys:cmdarg "midi-in"))
-      0
-      (string->number (sys:cmdarg "midi-in"))))
-
-(println "MIDI out port is" midi-out-port "MIDI in port is" midi-in-port)
-
-;; init MIDI stuff
-
-(define *midi-in* (midi_new_indevice))
-(define *midi-out* (midi_new_outdevice))
-
-;; query for valid midi output devices
-(midi_query_outports *midi-out*)
-(midi_open_outport *midi-out* midi-out-port)
-;; query for valid midi input
-(midi_query_inports *midi-in*)
-(midi_open_inport *midi-in* midi-in-port)
-
-;; register a *midi-in* to "midi_callback"
-(midi_register_device *midi-in* "midi_msg_buffer_receiver")
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (if with-dsp?
@@ -318,8 +307,8 @@
                       (record_midi_msg (real->integer time) *midi-note-on* 13 (real->integer pitch) (real->integer velocity))
                       (record_midi_msg (real->integer (+ time dur)) *midi-note-off* 13 (real->integer pitch) (real->integer velocity))
                       ;; (println 'dur: dur 'pitch: pitch)
-                      (callback time 'midi_send device *midi-note-on* channel pitch velocity)
-                      (callback (+ time dur) 'midi_send device *midi-note-off* channel pitch velocity))))
+                      (callback time 'pm_send device *midi-note-on* channel pitch velocity)
+                      (callback (+ time dur) 'pm_send device *midi-note-off* channel pitch velocity))))
             (vector-set! notes pitch (+ time duration)))))))
 
 

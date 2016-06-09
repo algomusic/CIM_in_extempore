@@ -19,12 +19,12 @@
 (sys:load-preload-check 'cimlib)
 (define *xtmlib-cimlib-loaded* #f)
 
-(sys:precomp:suppress-precomp-do
- (sys:load "libs/external/rtmidi.xtm"))
-(sys:precomp:insert-sexp '(sys:load "libs/external/rtmidi.xtm"))
-(sys:precomp:suppress-precomp-do
+(impc:aot:suppress-aot-do 
+ (sys:load "libs/external/portmidi.xtm"))
+(impc:aot:insert-forms (sys:load "libs/external/portmidi.xtm"))
+(impc:aot:suppress-aot-do 
  (sys:load "libs/core/math.xtm"))
-(sys:precomp:insert-sexp '(sys:load "libs/core/math.xtm"))
+(impc:aot:insert-forms (sys:load "libs/core/math.xtm"))
 ;; (sys:precomp:suppress-precomp-do
 ;;  (sys:load "libs/core/audio_dsp.xtm"))
 ;; (sys:precomp:insert-sexp '(sys:load "libs/core/audio_dsp.xtm"))
@@ -32,7 +32,7 @@
 ;;  (sys:load "libs/core/instruments.xtm"))
 ;; (sys:precomp:insert-sexp '(sys:load "libs/core/instruments.xtm"))
 
-(sys:precomp:insert-header "xtmcimlib")
+(impc:aot:insert-header "xtmcimlib")
 
 (bind-val CIMSRd double 44100.0)
 (bind-val CIMSR i64 44100)
@@ -284,7 +284,7 @@
       (tset! cimkey 1 majmin)
       note)))
 
-(bind-func CIMNote_print:[void,CIMNote*]*
+(bind-func print:[void,CIMNote*]*
   (lambda (note)
     (if (null? note)
         (printout "<NOTE: NULL>")
@@ -298,8 +298,6 @@
                   " key: " (cim_note_key note)
                   ">"))
     void))
-
-(bind-poly print CIMNote_print)
 
 (bind-func retrieve_note
   (lambda (idx)
@@ -327,7 +325,7 @@
     (doloop (i CIMNoteBufferIdx)
       (println (retrieve_note i)))))
 
-(bind-func find_note_a
+(bind-func find_note
   (lambda (timea timeb)
     (let ((idx 0)
           (note (retrieve_note idx)))
@@ -338,11 +336,11 @@
         (set! note (retrieve_note idx)))
       note)))
 
-(bind-func find_note_b
+(bind-func find_note
   (lambda (timea)
-    (find_note_a timea timea)))
+    (find_note:[CIMNote*,double,double]* timea timea)))
 
-(bind-func find_note_c
+(bind-func find_note
   (lambda (timea pitch)
     (let ((idx 0)
           (note (retrieve_note idx)))
@@ -352,10 +350,6 @@
         (set! idx (+ idx 1))
         (set! note (retrieve_note idx)))
       note)))
-
-(bind-poly find_note find_note_a)
-(bind-poly find_note find_note_b)
-(bind-poly find_note find_note_c)
 
 ;; valid, start note, finish note, size, onset, duration, bpm, homophonic(%)
 (bind-type CIMChunk <i1,CIMNote*,CIMNote*,i64,double,double,double,double>)
@@ -548,7 +542,7 @@
       a)))
 
 
-(bind-func CIMChunk_print:[void,CIMChunk*]*
+(bind-func print:[void,CIMChunk*]*
   (lambda (chunk)
     (if (null? chunk)
         (printout "<CHUNK: NULL>")
@@ -563,8 +557,6 @@
           (printout "\nhomo   : " (dtoi64 (* 100. (cim_chunk_homophonic chunk))) " %")
           (printout "\ndur    : " (cim_chunk_duration chunk) ">")))
     void))
-
-(bind-poly print CIMChunk_print)
 
 (bind-val CIMDefaultGapSize double 3.0)
 
@@ -607,7 +599,7 @@
 ;;
 ;; if gapsize > 0.0 split based on gapsize
 ;; if gapsize == 0.0 then split based on elements of closure.
-(bind-func find_chunk_a
+(bind-func find_chunk
   (let ((chunk:CIMChunk* (alloc)))
     (lambda (chunk_num:i64 gapsize:double startidx:i64 endidx:i64)
       ;; (println "in find chunk a: " chunk_num)
@@ -668,53 +660,43 @@
               (set_chunk_homophonic_percentage chunk)
               chunk))))))
 
-(bind-func find_chunk_b
+(bind-func find_chunk
   (lambda (chunk_num gap)
-    (find_chunk_a chunk_num gap 0 100000000)))
+    (find_chunk:[CIMChunk*,i64,double,i64,i64]* chunk_num gap 0 100000000)))
 
-(bind-func find_chunk_c
+(bind-func find_chunk
   (lambda (chunk_num start)
-    (find_chunk_a chunk_num CIMDefaultGapSize start 100000000)))
+    (find_chunk:[CIMChunk*,i64,double,i64,i64]* chunk_num CIMDefaultGapSize start 100000000)))
 
-(bind-func find_chunk_d
+(bind-func find_chunk
   (lambda (chunk_num gap start)
-    (find_chunk_a chunk_num gap start 100000000)))
+    (find_chunk:[CIMChunk*,i64,double,i64,i64]* chunk_num gap start 100000000)))
 
-(bind-func find_chunk_e
+(bind-func find_chunk
   (lambda (chunk_num start end)
-    (find_chunk_a chunk_num CIMDefaultGapSize start end)))
+    (find_chunk:[CIMChunk*,i64,double,i64,i64]* chunk_num CIMDefaultGapSize start end)))
 
-(bind-func find_chunk_f
+(bind-func find_chunk
   (lambda (chunk_num)
-    (find_chunk_a chunk_num 1.5 0 100000000)))
+    (find_chunk:[CIMChunk*,i64,double,i64,i64]* chunk_num 1.5 0 100000000)))
 
-(bind-poly find_chunk find_chunk_a)
-(bind-poly find_chunk find_chunk_b)
-(bind-poly find_chunk find_chunk_c)
-(bind-poly find_chunk find_chunk_d)
-(bind-poly find_chunk find_chunk_e)
-(bind-poly find_chunk find_chunk_f)
-
-(bind-func num_chunks_a
-  (lambda (gap)
-    (let ((idx 1)
+(bind-func num_chunks
+  (lambda (gap:double)
+    (let ((idx 1:i64)
           (chunk (find_chunk idx gap)))
       (while (cim_chunk_valid chunk)
         (set! idx (+ idx 1))
         (set! chunk (find_chunk idx gap)))
       (- idx 1))))
 
-(bind-func num_chunks_b
-  (lambda (gap startidx endidx)
+(bind-func num_chunks
+  (lambda (gap:double startidx endidx)
     (let ((idx 1)
           (chunk (find_chunk idx gap startidx endidx)))
       (while (cim_chunk_valid chunk)
         (set! idx (+ idx 1))
         (set! chunk (find_chunk idx gap)))
       (- idx 1))))
-
-(bind-poly num_chunks num_chunks_a)
-(bind-poly num_chunks num_chunks_b)
 
 ;; a is the lowest index to search from
 ;; b is the highest index to search too
@@ -728,9 +710,9 @@
 ;;
 ;; d1 is lower bound in beats
 ;; d2 is the upper bound in beats
-(bind-func find_random_chunk_a
+(bind-func find_random_chunk
   (lambda (gap homophonic startidx endidx d1 d2)
-    (let ((num (num_chunks_b gap startidx endidx))
+    (let ((num (num_chunks gap startidx endidx))
           (cnt:i64 20)
           (chunk (find_chunk (dtoi64 (+ 1.0 (* (i64tod num) (random)))) gap startidx endidx)))
       (while (and (or (< (cim_chunk_size chunk) 1)
@@ -761,62 +743,55 @@
           null       
           chunk))))
 
-(bind-func find_random_chunk_b
+(bind-func find_random_chunk
   (lambda (gap homophonic d1 d2 history)
-    (find_random_chunk_a gap homophonic
-                         (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0) (* -1 history)
-                         d1 d2)))
+    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
+                       (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0) (* -1 history)
+                       d1 d2)))
 
-(bind-func find_random_chunk_c
+(bind-func find_random_chunk
   (lambda (gap homophonic d1 d2)
-    (find_random_chunk_a gap homophonic
+    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
                          0 (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0)                         
                          d1 d2)))
 
-(bind-func find_random_chunk_d
+(bind-func find_random_chunk
   (lambda (gap homophonic history)
-    (find_random_chunk_a gap homophonic
+    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
                          (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0) (* -1 history)
                          0.0 100000.0)))
 
-(bind-func find_random_chunk_e
+(bind-func find_random_chunk
   (lambda (gap homophonic)
-    (find_random_chunk_a gap homophonic
+    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
                          0 (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0)
                          0.0 100000.0)))
 
-(bind-func find_random_chunk_f
+(bind-func find_random_chunk
   (lambda (gap)
-    (find_random_chunk_a gap 0.0
+    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap 0.0
                          0 (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0)
                          0.0 100000.0)))
 
-(bind-func find_random_chunk_g
+(bind-func find_random_chunk
   (lambda (gap homophonic start end d1 d2)
-    (find_random_chunk_a gap homophonic
+    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
                          start end
                          d1 d2)))
 
-(bind-func find_random_chunk_h
+(bind-func find_random_chunk
   (lambda (gap homophonic start end)
-    (find_random_chunk_a gap homophonic
+    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
                          start end
                          0.0 100000.0)))
 
-(bind-func find_random_chunk_i
+(bind-func find_random_chunk
   (lambda (gap start end)
-    (find_random_chunk_a gap 0.0
+    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap 0.0
                          start end
                          0.0 100000.0)))
 
-(bind-poly find_random_chunk find_random_chunk_a)
-(bind-poly find_random_chunk find_random_chunk_b)
-(bind-poly find_random_chunk find_random_chunk_c)
-(bind-poly find_random_chunk find_random_chunk_d)
-(bind-poly find_random_chunk find_random_chunk_e)
-(bind-poly find_random_chunk find_random_chunk_f)
-
-(bind-func dump_chunks_a
+(bind-func dump_chunks
   (lambda (gap:double)
     (let ((idx 1)
           (chunk (find_chunk idx gap)))
@@ -828,12 +803,9 @@
       (println)
       void)))
 
-(bind-func dump_chunks_b
+(bind-func dump_chunks
   (lambda ()
-    (dump_chunks_a CIMDefaultGapSize)))
-
-(bind-poly dump_chunks dump_chunks_a)
-(bind-poly dump_chunks dump_chunks_b)
+    (dump_chunks:[void,double]* CIMDefaultGapSize)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -878,15 +850,13 @@
 
 (bind-func cim_db_destroy
   (lambda (db:ChunkDB*)
-    (free (cim_db_chunks db))
+    (free (cim_db_chunks:[CIMChunk*,ChunkDB*]* db))
     void))
 
-(bind-func print_CIMDB
+(bind-func print:[void,ChunkDB*]*
   (lambda (db)
     (println "<DB chunks:" (cim_db_num db) ">")
     void))
-
-(bind-poly print print_CIMDB)
 
 ;; copy from db1 into db2
 (bind-func cim_db_copy
@@ -947,24 +917,21 @@
         (set! i (+ i 1)))
       res)))
 
-(bind-func cim_db_update_a
+(bind-func cim_db_update
   (lambda (db gap)
     (let ((idx (cim_db_end db)) (i 0)
           (lastidx (last_note_index))
           (chunk null)
-          (num (num_chunks_b gap (+ idx 1) lastidx)))
+          (num (num_chunks gap (+ idx 1) lastidx)))
       (dotimes (i num)
-        (set! chunk (find_chunk_a num gap (+ idx 1) lastidx))
+        (set! chunk (find_chunk num gap (+ idx 1) lastidx))
         (if (not (null? chunk))
             (cim_db_insert db chunk)))
       (cim_db_num db))))
 
-(bind-func cim_db_update_b
+(bind-func cim_db_update
   (lambda (db)
-    (cim_db_update_a db CIMDefaultGapSize)))
-
-(bind-poly cim_db_update cim_db_update_a)
-(bind-poly cim_db_update cim_db_update_b)
+    (cim_db_update:[i64,ChunkDB*,double]* db CIMDefaultGapSize)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -1004,13 +971,13 @@
 
 
 (bind-func midi_send_dat
-  (lambda (device:i8* a:i8 b:i8 c:i8 d:i8)
-    (midi_send (cast device) a b c d)))
+  (lambda (device:PortMidiStream* a:i32 b:i32 c:i32 d:i32)
+    (pm_send device a b c d)))
 
 ;; where timea and timeb are limits for startime not endtime
 ;; where variance is a distance 'around' timea and timeb
-(bind-func note_midi_playback_a
-  (lambda (time device:i8* channel startnote:CIMNote* endnote:CIMNote*)
+(bind-func note_midi_playback
+  (lambda (time device:PortMidiStream* channel:i32 startnote:CIMNote* endnote:CIMNote*)
     (println "playback -------")
     (println "from:" startnote)
     (println "to  :" endnote)
@@ -1023,8 +990,8 @@
               (endidx (cim_note_index endnote))
               (num (+ 1 (- endidx startidx)))
               (note null)
-              (pitch 0)
-              (duration 0)
+              ;(pitch 0)
+              ;(duration 0)
               (i 0))
           (dotimes (i num)              
             (set! note (retrieve_note (+ i startidx)))
@@ -1032,45 +999,46 @@
               (callback (+ time
                            (dtoi64 (* CIMSRd (cim_note_onset note)))
                            starttime)
-                        midi_send_dat
+                        midi_send_dat:[i32,i8*,i32,i32,i32,i32]*
                         device
-                        MIDI_NOTE_ON channel
-                        (i64toi8 (cim_note_pitch note))
-                        (i64toi8 (cim_note_volume note)))
+                        MIDI_NOTE_ON
+                        channel
+                        (i64toi32 (cim_note_pitch note))
+                        (i64toi32 (cim_note_volume note)))
               (callback (+ (dtoi64 (* CIMSRd (cim_note_onset note)))
                            (dtoi64 (* CIMSRd (cim_note_duration note)))
                            time starttime)
-                        midi_send_dat
+                        midi_send_dat:[i32,i8*,i32,i32,i32,i32]*
                         device
-                        MIDI_NOTE_OFF channel
-                        (i64toi8 (cim_note_pitch note))
-                        (i64toi8 0))))
+                        MIDI_NOTE_OFF
+                        channel
+                        (i64toi32 (cim_note_pitch note))
+                        0:i32)))
           void))))
 
-(bind-func note_midi_playback_b
-  (lambda (time device:i8* channel chunknum gap)
+(bind-func note_midi_playback
+  (lambda (time device:i8* channel chunknum gap:double)
     (let ((chunk (find_chunk chunknum gap)))
-      (note_midi_playback_a time device channel
-                            (cim_chunk_start chunk)
-                            (cim_chunk_end chunk)))))
+      (note_midi_playback:[void,i64,i8*,i32,CIMNote*,CIMNote*]*
+       time device channel
+       (cim_chunk_start chunk)
+       (cim_chunk_end chunk)))))
 
-(bind-func note_midi_playback_c
+(bind-func note_midi_playback
   (lambda (time device:i8* channel chunknum)
     (let ((chunk (find_chunk chunknum 2.0)))
-      (note_midi_playback_a time device channel
-                            (cim_chunk_start chunk)
-                            (cim_chunk_end chunk)))))
+      (note_midi_playback:[void,i64,i8*,i32,CIMNote*,CIMNote*]*
+       time device channel
+       (cim_chunk_start chunk)
+       (cim_chunk_end chunk)))))
 
-(bind-func note_midi_playback_d
+(bind-func note_midi_playback
   (lambda (time device:i8* channel)
-    (note_midi_playback_a time device channel
-                          (retrieve_note 0)
-                          (last_note))))
+    (note_midi_playback:[void,i64,i8*,i32,CIMNote*,CIMNote*]*
+     time device channel
+     (retrieve_note 0)
+     (last_note))))
 
-(bind-poly note_midi_playback note_midi_playback_a)
-(bind-poly note_midi_playback note_midi_playback_b)
-(bind-poly note_midi_playback note_midi_playback_c)
-(bind-poly note_midi_playback note_midi_playback_d)
 
 
 
@@ -1192,14 +1160,13 @@
   (lambda (msg:MidiMSG*)
     (tref msg 6)))
 
-(bind-func MidiMSG_print:[void,MidiMSG*]*
+(bind-func print:[void,MidiMSG*]*
   (lambda (x)
     (if (null? x)
         (printf "<MIDI: NULL>")
         (printf "<MIDI: idx(%d),time(%f),type(%d),a(%d),b(%d)>" (midi_msg_idx x) (midi_msg_onset x) (midi_msg_type x) (midi_msg_a x) (midi_msg_b x)))
     void))
 
-(bind-poly print MidiMSG_print)
 
 (bind-func record_midi_msg
   (lambda (time type chan a b)
@@ -1210,13 +1177,12 @@
       (set! MidiMSGBufferIdx (+ MidiMSGBufferIdx 1))
       (- MidiMSGBufferIdx 1))))
 
-(bind-func retrieve_midi_msg_a
+(bind-func retrieve_midi_msg
   (lambda (idx)
     (if (>= idx MidiMSGBufferIdx)
         null
         (aref-ptr MidiMSGBuffer idx))))
 
-(bind-poly retrieve_midi_msg retrieve_midi_msg_a)
 
 (bind-func dump_midi_buffer
   (lambda ()
@@ -1232,7 +1198,7 @@
   (lambda ()
     MidiMSGBufferIdx))
 
-(bind-func find_midi_msg_a
+(bind-func find_midi_msg
   (lambda (timea timeb)
     (let ((idx 0)
           (msg (retrieve_midi_msg idx)))
@@ -1243,20 +1209,18 @@
         (set! msg (retrieve_midi_msg idx)))
       msg)))
 
-(bind-poly find_midi_msg find_midi_msg_a)
-
 (bind-func find_midi_msg_off
   (lambda (msgin:MidiMSG*)
     (let ((idx (+ (midi_msg_idx msgin) 1))
           (pitchin (midi_msg_pitch msgin))
           (msg (retrieve_midi_msg idx)))
       (while (or (not (null? msg))
-                 (= MIDI_CC (midi_msg_type msg))
+                 (= MIDI_CC (i8toi32 (midi_msg_type msg)))
                  (<> (midi_msg_pitch msg) pitchin))
         (set! idx (+ idx 1))
         (set! msg (retrieve_midi_msg idx)))
       (if (null? msg) msg
-          (if (= (midi_msg_type msg) MIDI_NOTE_OFF) msg
+          (if (= (i8toi32 (midi_msg_type msg)) MIDI_NOTE_OFF) msg
               (if (= (midi_msg_volume msg) 0)
                   msg
                   null))))))
@@ -1267,7 +1231,7 @@
           (pitchin (midi_msg_pitch msgin))
           (msg (retrieve_midi_msg idx)))
       (while (or (not (null? msg))
-                 (= MIDI_CC (midi_msg_type msg))
+                 (= MIDI_CC (i8toi32 (midi_msg_type msg)))
                  (<> (midi_msg_pitch msg) pitchin))
         (set! idx (+ idx 1))
         (set! msg (retrieve_midi_msg idx)))
@@ -1276,11 +1240,11 @@
 
 
 (bind-func midi_send_dat
-  (lambda (device:i8* a:i8 b:i8 c:i8 d:i8)
-    (midi_send (cast device) a b c d)))
+  (lambda (device:PortMidiStream* a:i32 b:i32 c:i32 d:i32)
+    (pm_send device a b c d)))
 
 ;; where timea and timeb are limits for startime not endtime
-(bind-func midi_playback_a
+(bind-func midi_playback
   (lambda (time device:i8* timea timeb control_only:i1 force_chan_0:i1)
     (let ((startmsg (find_midi_msg timea (+ timea 0.1)))
           (endmsg (find_midi_msg timeb (+ timeb 0.1))))
@@ -1293,54 +1257,52 @@
                 (endidx (midi_msg_idx endmsg))
                 (num (- endidx startidx))
                 (msg null)
-                (pitch 0)
-                (duration 0)
+                ;(pitch 0)
+                ;(duration 0)
                 (i 0))
             (dotimes (i num)              
               (set! msg (retrieve_midi_msg (+ i startidx)))
               (if (or (not control_only)
-                      (= (midi_msg_type msg) MIDI_CC))
-                  (callback (+ (dtoi64 (* CIMSRd (midi_msg_onset msg))) time starttime) midi_send_dat
+                      (= (i8toi32 (midi_msg_type msg)) MIDI_CC))
+                  (callback (+ (dtoi64 (* CIMSRd (midi_msg_onset msg))) time starttime) midi_send_dat:[i32,i8*,i32,i32,i32,i32]*
                             device
-                            (midi_msg_type msg)
-                            (if force_chan_0 0:i8 (i32toi8 (midi_msg_channel msg)))
-                            (i32toi8 (midi_msg_a msg))
-                            (i32toi8 (midi_msg_b msg)))))
+                            (i8toi32 (midi_msg_type msg))
+                            (if force_chan_0 0:i32 (midi_msg_channel msg))
+                            (midi_msg_a msg)
+                            (midi_msg_b msg))))
             void)))))
 
 
-(bind-func midi_playback_b
+(bind-func midi_playback
   (lambda (time device timea control_only force_chan_0)
-    (midi_playback_a time device timea
-                     (midi_msg_onset (last_midi_msg))
-                     control_only force_chan_0)))
+    (midi_playback:[void,i64,i8*,double,double,i1,i1]*
+     time device timea
+     (midi_msg_onset (last_midi_msg))
+     control_only force_chan_0)))
 
-(bind-func midi_playback_c
+(bind-func midi_playback
   (lambda (time device control_only force_chan_0)
-    (midi_playback_a time device
-                     (midi_msg_onset (retrieve_midi_msg 0))
-                     (midi_msg_onset (last_midi_msg))
-                     control_only force_chan_0)))
+    (midi_playback:[void,i64,i8*,double,double,i1,i1]*
+     time device
+     (midi_msg_onset (retrieve_midi_msg 0))
+     (midi_msg_onset (last_midi_msg))
+     control_only force_chan_0)))
 
-(bind-func midi_playback_d
+(bind-func midi_playback
   (lambda (time device control_only)
-    (midi_playback_a time device
-                     (midi_msg_onset (retrieve_midi_msg 0))
-                     (midi_msg_onset (last_midi_msg))
-                     control_only #f)))
+    (midi_playback:[void,i64,i8*,double,double,i1,i1]*
+     time device
+     (midi_msg_onset (retrieve_midi_msg 0))
+     (midi_msg_onset (last_midi_msg))
+     control_only #f)))
 
-(bind-func midi_playback_e
+(bind-func midi_playback
   (lambda (time device)
-    (midi_playback_a time device
-                     (midi_msg_onset (retrieve_midi_msg 0))
-                     (midi_msg_onset (last_midi_msg))
-                     #f #f)))
-
-(bind-poly midi_playback midi_playback_a)
-(bind-poly midi_playback midi_playback_b)
-(bind-poly midi_playback midi_playback_c)
-(bind-poly midi_playback midi_playback_d)
-(bind-poly midi_playback midi_playback_e)
+    (midi_playback:[void,i64,i8*,double,double,i1,i1]*
+     time device
+     (midi_msg_onset (retrieve_midi_msg 0))
+     (midi_msg_onset (last_midi_msg))
+     #f #f)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -1375,7 +1337,7 @@
   (let ((useweighting #f)
         (firstm 0) (firsti 0) (secondm 0) (secondi 0) (i 0) (idx 0)
         (weight 0.0) (bpm 0.0) (firstbpm 0.0) (secondbpm 0.0)
-        (current_bpm 120.0))
+        (cur_bpm 120.0))
     (lambda ()
       (set! firstm 0) (set! firsti 0) (set! secondm 0) (set! secondi i) (set! idx 0)
       (dotimes (i NumRhythmBins)
@@ -1406,12 +1368,12 @@
             (dotimes (i NumRhythmBins)
               (aset! rhythmbins i 0))
             (aset! rhythmbins idx 3)))
-      (if (and (> (fabs (- current_bpm bpm)) 2.0)
+      (if (and (> (fabs (- cur_bpm bpm)) 2.0)
                (> firstm 1))
           (begin
             (set! CIM_GLOBAL_BPM_CONFIDENCE 0)
             ;;(println "changing bpm: " current_bpm " to " bpm)
-            (set! current_bpm bpm)
+            (set! cur_bpm bpm)
             void)
           (begin
             (set! CIM_GLOBAL_BPM_CONFIDENCE (+ 1 CIM_GLOBAL_BPM_CONFIDENCE))
@@ -1420,7 +1382,7 @@
                (> (cim_get_pedal 1) 30))
           (begin
             ;;(println "updating global metro " CIM_GLOBAL_BPM " ... ")
-            (set! CIM_GLOBAL_BPM current_bpm)))
+            (set! CIM_GLOBAL_BPM cur_bpm)))
       ;(print_rhythm_bins)
       (dtoi64 CIM_GLOBAL_BPM))))
 
@@ -1457,6 +1419,34 @@
             (set! previous_onset this_onset)
             void)))))
 
+(bind-func _qsorti64
+  (lambda (dat:i64* left right)
+    (if (< left right)
+        (let ((tmp 0)
+              (_swap (lambdas (x y)
+                      (set! tmp (pref dat x))
+                      (pset! dat x (pref dat y))
+                      (pset! dat y tmp)))
+              (pivot (pref dat right))
+              (index left)
+              (i 0))
+          (dotimes (i left (- right left))
+            (if (or (< (pref dat i) pivot)
+                    (= (pref dat i) pivot))
+                (begin (_swap i index)
+                       (set! index (+ index 1)))))
+          (_swap right index)
+          (_qsorti64 dat left (- index 1))
+          (_qsorti64 dat (+ index 1) right))
+        void)))
+
+(bind-func sorti64
+  (lambda (arr:i64* lgth)
+    (_qsorti64 arr 0 (- lgth 1))
+    arr))
+
+
+
 ;; maj 2 2 1 2 2 2 1
 ;; min 2 1 2 2 1 2 2
 ;;     2 1 2 2 2 1 2
@@ -1469,7 +1459,7 @@
     (lambda (pcs:|12,i64|* weighted:|12,i64|*)
       (dotimes (i 12)
         (aset! tmppcs i (aref pcs i)))
-      (sort (cast tmppcs i64*) 12)
+      (sorti64 (cast tmppcs i64*) 12)
       (dotimes (i 12)
         (aset! tmpweight i (aref tmppcs (- 11 i))))
       (dotimes (i 12)
@@ -2112,23 +2102,28 @@
 
 (set_lib_load_time)
 
+;; midi receivers
+
 (bind-func midi_msg_buffer_receiver
-  (let ((type:i8 0) (chan:i8 0) (a:i8 0) (b:i8 0) (idx -1)
+  (let ((idx -1)
         (note:CIMNote* null)
         (time_of_first_message 0.0))
-    (lambda (time:double len:i64 msg:i8*)
-      (set! type (>> (pref msg 0) 4))
-      (set! chan (& (pref msg 0) 15))
-      (set! a (pref msg 1))
-      (set! b (pref msg 2))
-      (if (or (= type MIDI_NOTE_ON) (= type MIDI_NOTE_OFF) (= type MIDI_CC))
+    (lambda (time:double type:i32 chan:i32 a:i32 b:i32)
+      ;; (set! typ (>> (pref msg 0) 4))
+      ;; (set! chan (& (pref msg 0) 15))
+      ;; (set! a (pref msg 1))
+      ;; (set! b (pref msg 2))
+      (if (or (= type MIDI_NOTE_ON)
+              (= type MIDI_NOTE_OFF)
+              (= type MIDI_CC))
           (let ((t1 (now))
                 (t2 (dtoi64 (* CIMSRd (- (clock_clock) (audio_clock_base)))))
-                (t t2))
-            (if CIM_PRINT_MIDI_MESSAGES (println "midi-in" type chan a b))
-            (record_midi_msg t type (convert chan) (convert a) (convert b))
-            (if (or (= type MIDI_NOTE_ON) (= type MIDI_NOTE_OFF))
-                (if (<> chan 1:i8)
+                (t:i64 t2))
+            (if CIM_PRINT_MIDI_MESSAGES (println "midi-in" typ chan a b))
+            (record_midi_msg t typ (convert chan) (convert a) (convert b))
+            (if (or (= type MIDI_NOTE_ON)
+                    (= type MIDI_NOTE_OFF))
+                (if (<> chan 1:i32)
                     (begin
                       (set! idx (record_note t type (convert chan) (convert a) (convert b)))
                       (set! note (retrieve_note idx))
@@ -2142,14 +2137,14 @@
                             (set! CIMNoteBufferIdx (- CIMNoteBufferIdx 1))))
                       void)
                     (begin
-                      (cond ((= a 2:i8) (cim_set_pedal 1 (i8toi64 b)) void) ;; analysis 1
-                            ((= a 3:i8) (cim_set_pedal 2 (i8toi64 b)) void) ;; record 2
-                            ((= a 5:i8) (cim_set_pedal 4 (i8toi64 b)) void) ;; flush 4
-                            ((= a 4:i8) (cim_set_pedal 5 (i8toi64 b)) void) ;; panic 5
+                      (cond ((= a 2) (cim_set_pedal 1 (convert b)) void) ;; analysis 1
+                            ((= a 3) (cim_set_pedal 2 (convert b)) void) ;; record 2
+                            ((= a 5) (cim_set_pedal 4 (convert b)) void) ;; flush 4
+                            ((= a 4) (cim_set_pedal 5 (convert b)) void) ;; panic 5
                             (else void))
                       void)))
             (if (= type MIDI_CC)
-                (cond ((= a 64:i8)
+                (cond ((= a 64:i32)
                        (if (> (cim_get_pedal 2) 30)
                           (begin 
                              ;;(println "record midi-cc:" a b)
@@ -2164,31 +2159,57 @@
                               (set! CIM_GLOBAL_BPM_CONFIDENCE 0)
                               ;;(aset! rhythmbins (dtoi64 (/ (- CIM_GLOBAL_BPM bpm_low) bpm_mod)) 2)
                               ))
-                       (cim_set_pedal 1 (i8toi64 b)) ;; analyse
+                       (cim_set_pedal 1 (convert b)) ;; analyse
                        void)
-                      ((= a 67:i8) ;; left piano pedal
-                       (cim_set_pedal 2 (i8toi64 b)) ;; record
+                      ((= a 67) ;; left piano pedal
+                       (cim_set_pedal 2 (convert b)) ;; record
                        void)
-                      ((= a 68:i8)
-                       (cim_set_pedal 1 (i8toi64 b)) ;; analyse
+                      ((= a 68)
+                       (cim_set_pedal 1 (convert b)) ;; analyse
                        void)
-                      ((= a 69:i8)
-                       (cim_set_pedal 2 (i8toi64 b)) ;; rec
+                      ((= a 69)
+                       (cim_set_pedal 2 (convert b)) ;; rec
                        void)
-                      ((= a 10:i8) ;; 10 and 21 the same
-                       (cim_set_pedal 3 (i8toi64 b)) 
+                      ((= a 10) ;; 10 and 21 the same
+                       (cim_set_pedal 3 (convert b)) 
                        void)
-                      ((= a 7:i8) ;; 10 and 21 the same 
-                       (cim_set_pedal 3 (i8toi64 b)) ;; density 3
+                      ((= a 7) ;; 10 and 21 the same 
+                       (cim_set_pedal 3 (convert b)) ;; density 3
                        void)
-                      ((= a 21:i8) ;; 10 and 21 the same
-                       (cim_set_pedal 3 (i8toi64 b))
+                      ((= a 21) ;; 10 and 21 the same
+                       (cim_set_pedal 3 (convert b))
                        void)
                       (else ;; nothing,
                        void)))
             ;;(record_tslice t note)
             void)
           void))))
+      
+    
 
-(sys:precomp:insert-footer "xtmcimlib")
+(bind-func midi_note_on
+  (lambda (pitch:i32 volume:i32 chan:i32)
+    ;; (println "NOTE_ON :" pitch volume chan)
+    (midi_msg_buffer_receiver (clock_clock) MIDI_NOTE_ON chan pitch volume)
+    void))
+
+(bind-func midi_note_off
+  (lambda (pitch:i32 volume:i32 chan:i32)
+    ;; (println "NOTE_OFF:" pitch volume chan)
+    (midi_msg_buffer_receiver (clock_clock) MIDI_NOTE_OFF chan pitch 0)    
+    void))
+
+(bind-func midi_cc
+  (lambda (controller:i32 value:i32 chan:i32)
+    ;; (println "MIDI_CC :" controller value chan)
+    (midi_msg_buffer_receiver (clock_clock) MIDI_CC chan controller value)    
+    void))
+
+;; by default don't print non note/cc MIDI messages
+(bind-func midi_msg
+  (lambda (type:i32 a:i32 b:i32 chan:i32)
+    ;; (println "MIDIMSG: " type a b chan)
+    void))
+
+(impc:aot:insert-footer "xtmcimlib")
 (define *xtmlib-cimlib-loaded* #t)
