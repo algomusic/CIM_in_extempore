@@ -21,11 +21,11 @@
                           #f #t))
 
 (define with-midicc? (if (or (string=? "" (sys:cmdarg "midicc"))
-                              (string=? "0" (sys:cmdarg "midicc")))
-                          #f #t))
+                             (string=? "0" (sys:cmdarg "midicc")))
+                         #f #t))
 
 (define with-osc? (if (or (string=? "" (sys:cmdarg "osc"))
-                              (string=? "0" (sys:cmdarg "osc")))
+                          (string=? "0" (sys:cmdarg "osc")))
                       #f #t))
 
 (define midi-out-port 
@@ -45,12 +45,12 @@
 ;; cimlib overloads certain midi input funcs
 (sys:load "libs/external/midi_input.xtm")
 
-(set_midi_in midi-in-port)
+;; (set_midi_in midi-in-port)
 
-(define *midi_out* (pm_create_output_stream midi-out-port))
+(define *midi-out* (pm_create_output_stream midi-out-port))
 
 ;;(sys:load "../CIM_in_extempore/cimlib.xtm")
-(sys:load "../CIM_in_extempore/cimlib.xtm")
+(sys:load "/Users/andrew/Documents/code/CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/core/pc_ivl.xtm")
 (if with-dsp? (sys:load "libs/external/instruments_ext.xtm"))
 
@@ -79,11 +79,12 @@
 
 ;; utilities
 (define panic
-  (lambda (device)
-    (pm_send device *midi-cc* 0 64 0)
+  (lambda (stream)
+    (pm_send stream *midi-cc* 0 64 0)
   	(dotimes (c 16)
   		(dotimes (i 127)
-    		(midi_send device 8 c i 0)))))
+        (pm_send stream 8 c i 0)))))
+
 
 (define current-pcs
   (lambda ()
@@ -326,9 +327,9 @@
            (*metro* 'dur ,(cadr (cdddr args))) 0)))
 
 (define play-midi-cc
-  (lambda (time device cc val channel)
+  (lambda (time stream cc val channel)
     (record_midi_msg (real->integer time) *midi-cc* 13 (real->integer cc) (real->integer val))    
-    (callback (real->integer time) 'midi_send device *midi-cc* (real->integer channel) (real->integer cc) (real->integer val))))
+    (callback (real->integer time) 'pm_send stream *midi-cc* (real->integer channel) (real->integer cc) (real->integer val))))
 
 (bind-func print_chunk_notes
   (lambda (index:i64 size:i64)
@@ -337,6 +338,14 @@
 
 ;; bugs full gas stops playback (i.e p3 > 120)
 ;; latest phrase never available for playback.
+
+(bind-func find_random_chunk_call
+  (lambda (a b c d e f)
+    (find_random_chunk a b c d e f)))
+
+(bind-func total_chunks
+  (lambda (gap startidx endix)
+    (num_chunks gap startidx endix)))
 
 (define play-chunk  
   (lambda (beat inst gap dcontrol)    
@@ -347,12 +356,12 @@
     (let* (;(chunk (find_random_chunk_a gap (if (> *polyphony* 2) -10.0 0.0) 0 0 1.0 (* 2.0 dcontrol))) ;;1000.0))
            (last_idx (cim_note_index (last_note)))
                                         ;(lllll (println 'last_note_index: last_idx))
-           (num (num_chunks_b gap 0 0))
+           (num (total_chunks gap 0 0))
                                         ;(lllllll (println 'num: num))
            ;gap homophonic startidx endidx upper lower (duration in beats)
-           (chunk (find_random_chunk_a gap 0.0 0 0 0.0 (if (< (current_density) .01)
-                                                            (* 4. dcontrol)
-                                                            (* 2. dcontrol)))) 
+           (chunk (find_random_chunk_call gap 0.0 0 0 0.0 (if (< (current_density) .01)
+                                                              (* 4. dcontrol)
+                                                              (* 2. dcontrol)))) 
            (chunkkey (cim_chunk_key chunk))
            (cmaj? (if (= 1 (cim_key_major chunkkey)) #t #f))
            (ckey (cim_key_root chunkkey))
@@ -580,7 +589,7 @@
     (note_buffer_reset)
     (if *osc:on*
         (begin
-          (let ((num (num_chunks_b 1.5 0 0)))
+          (let ((num (total_chunks 1.5 0 0)))
             (io:osc:send (now) addy1 "/CIMdisplay/segs" (number->string num))
             (io:osc:send (now) addy1 "/CIMdisplay/flushLED" 1)
             (io:osc:send (+ (now) 25000) addy1 "/CIMdisplay/flushLED" 0))))
@@ -588,7 +597,18 @@
 
 (reset_buffers)
 
-;(cim_set_pedal 3 60)
-;(cim_set_pedal 2 0)
-;(cim_set_pedal 1 0)
+;; density controller (half way)
+(cim_set_pedal 3 60)
 
+;; recording (always on)
+(cim_set_pedal 2 127)
+
+;; analysis (always off)
+(cim_set_pedal 1 0)
+
+;; setup a single initial section (zero indexed as always)
+;; index 0, 120.0 bpm, 0 (C), #t Major
+($ (set_cim_section 0 120.0 0 #t))
+
+;; start sections off with initial call
+(next_cim_section)

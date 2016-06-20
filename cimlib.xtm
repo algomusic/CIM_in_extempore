@@ -15,16 +15,18 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(sys:load "libs/cimlib.xtm" 'quiet)
+(sys:load "libs/aot-cache/cimlib.xtm" 'quiet)
 (sys:load-preload-check 'cimlib)
 (define *xtmlib-cimlib-loaded* #f)
 
-(impc:aot:suppress-aot-do 
- (sys:load "libs/external/portmidi.xtm"))
-(impc:aot:insert-forms (sys:load "libs/external/portmidi.xtm"))
-(impc:aot:suppress-aot-do 
- (sys:load "libs/core/math.xtm"))
-(impc:aot:insert-forms (sys:load "libs/core/math.xtm"))
+;; (impc:aot:suppress-aot-do 
+;;  (sys:load "libs/external/portmidi.xtm"))
+;; (impc:aot:insert-forms (sys:load "libs/external/portmidi.xtm"))
+
+;; (impc:aot:suppress-aot-do 
+;;  (sys:load "libs/core/math.xtm"))
+;; (impc:aot:insert-forms (sys:load "libs/core/math.xtm"))
+
 ;; (sys:precomp:suppress-precomp-do
 ;;  (sys:load "libs/core/audio_dsp.xtm"))
 ;; (sys:precomp:insert-sexp '(sys:load "libs/core/audio_dsp.xtm"))
@@ -106,7 +108,7 @@
 ;; GLOBALS
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+                                        
 (bind-val CIM_GLOBAL_BPM double 120.0)
 (bind-val CIM_GLOBAL_BPM_CONFIDENCE i64 0)
 (bind-val CIM_GLOBAL_BPM_CONFIDENCE_WEIGHT i64 18)
@@ -158,6 +160,59 @@
     (if (null? key) 0
         (tref key 1))))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; CIM_SECTIONS
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(bind-type CIMSection <i64,CIMKey,double>)
+(bind-val CIM_GLOBAL_SECTIONS |100,CIMSection|)
+(bind-val CIM_GLOBAL_MAX_SECTION i64 0)
+(bind-val CIM_GLOBAL_CURRENT_SECTION i64 0)
+
+(bind-func set_cim_section
+  (lambda (idx bpm root:i64 maj_min:i1)
+    (if (> (+ 1 idx) CIM_GLOBAL_MAX_SECTION)
+        (set! CIM_GLOBAL_MAX_SECTION (+ 1 idx)))
+    (if (>= idx 100)
+        (begin (println "ERR: Global Seciton Max = 100!") void)
+        (let ((sect (aref-ptr CIM_GLOBAL_SECTIONS idx))
+              (key (tref-ptr sect 1)))
+          (tfill! key root maj_min)
+          (tset! sect 0 idx)
+          (tset! sect 2 bpm)
+          void))))
+
+(bind-func get_cim_section_bpm
+  (lambda (idx)
+    (if (>= idx 100)
+        (begin (println "ERR: Global Seciton Max = 100!") -1.0)
+        (let ((sect (aref-ptr CIM_GLOBAL_SECTIONS idx)))
+          (tref sect 2)))))
+
+(bind-func get_cim_section_key
+  (lambda (idx)
+    (if (>= idx 100)
+        (begin (println "ERR: Global Seciton Max = 100!") null)
+        (let ((sect (aref-ptr CIM_GLOBAL_SECTIONS idx)))
+          (tref-ptr sect 1)))))
+
+(bind-func next_cim_section
+  (lambda ()
+    (if (or (>= CIM_GLOBAL_CURRENT_SECTION 100)
+            (> CIM_GLOBAL_CURRENT_SECTION CIM_GLOBAL_MAX_SECTION))
+        (begin (println "ERR: Global Seciton Max = " CIM_GLOBAL_MAX_SECTION " and absolute max is 100") void)
+        (let ((sect (aref-ptr CIM_GLOBAL_SECTIONS CIM_GLOBAL_CURRENT_SECTION))
+              (key (tref-ptr sect 1)))
+          (set! CIM_GLOBAL_BPM (tref sect 2))
+          (tset! CIM_GLOBAL_KEY 0 (tref key 0))
+          (tset! CIM_GLOBAL_KEY 1 (tref key 1))
+          (set! CIM_GLOBAL_CURRENT_SECTION (% (+ CIM_GLOBAL_CURRENT_SECTION 1) CIM_GLOBAL_MAX_SECTION))
+          (println "Initializing BPM:" CIM_GLOBAL_BPM "in" (tref CIM_GLOBAL_KEY 0)
+                   (if (tref CIM_GLOBAL_KEY 1) "major" "minor"))
+          void))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -2178,6 +2233,14 @@
                        void)
                       ((= a 21) ;; 10 and 21 the same
                        (cim_set_pedal 3 (convert b))
+                       void)
+                      ((and (= a 80) ;; CC 80 changes section
+                            (> b 60)) 
+                       (next_cim_section)
+                       void)
+                      ((and (= a 81) ;; CC 81 flush note buffer
+                            (> b 60))
+                       (note_buffer_reset)
                        void)
                       (else ;; nothing,
                        void)))
