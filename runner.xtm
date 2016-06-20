@@ -45,7 +45,7 @@
 ;; cimlib overloads certain midi input funcs
 (sys:load "libs/external/midi_input.xtm")
 
-;; (set_midi_in midi-in-port)
+(set_midi_in midi-in-port)
 
 (define *midi-out* (pm_create_output_stream midi-out-port))
 
@@ -349,19 +349,18 @@
 
 (define play-chunk  
   (lambda (beat inst gap dcontrol)    
-    ;(println 'density (current_density) 'velocity (current_avg_velocity))    
     ;; gap homophonic start end d1 d2
     ;; so defaults to accept everything in find_random (with 1.5s gap)
     ;; (find_random_chunk_a 1.5 0.0 0 0 0.0 10000.0)
     (let* (;(chunk (find_random_chunk_a gap (if (> *polyphony* 2) -10.0 0.0) 0 0 1.0 (* 2.0 dcontrol))) ;;1000.0))
            (last_idx (cim_note_index (last_note)))
-                                        ;(lllll (println 'last_note_index: last_idx))
+           ;; (lllll (println 'last_note_index: last_idx))
            (num (total_chunks gap 0 0))
-                                        ;(lllllll (println 'num: num))
+           ;; (lllllll (println 'num: num))
            ;gap homophonic startidx endidx upper lower (duration in beats)
            (chunk (find_random_chunk_call gap 0.0 0 0 0.0 (if (< (current_density) .01)
                                                               (* 4. dcontrol)
-                                                              (* 2. dcontrol)))) 
+                                                              (* 2. dcontrol))))
            (chunkkey (cim_chunk_key chunk))
            (cmaj? (if (= 1 (cim_key_major chunkkey)) #t #f))
            (ckey (cim_key_root chunkkey))
@@ -379,10 +378,10 @@
             (io:osc:send (+ 5000 (*metro* beat)) addy1 "/CIMdisplay/tempoPBS" 0)))
       ;; (println)
       ;; (println 'diff: ckey cmaj? key maj?)
-      ;;(println '-----------------------)
-      ;;(CIMChunk_print chunk)
+      (println '-----------------------)
+      (println chunk)
       ;;(println)
-      ;;(println 'scale: scale 'bpm: )
+      ;;(println 'scale: scale 'bpm: bpm)
       ;;(print_chunk_notes idx size)
       ;(get-pitches-from-chunk chunk)
       (transform-pitches (get-pitches-from-chunk chunk) chunkkey)
@@ -409,9 +408,9 @@
                              (mm2 (if (< mm .05) mm
                                       (if (> mm .1) (- mm .125)
                                           0.0))))
-                        ;; (println 'note: (cim_chunk_note_pitch chunk i)
-                        ;;          'beats: (cim_chunk_note_beats chunk i)
-                        ;;          'dur: (cim_chunk_note_duration chunk i))
+                        (println 'note: (cim_chunk_note_pitch chunk i)
+                                 'beats: (cim_chunk_note_beats chunk i)
+                                 'dur: (cim_chunk_note_duration chunk i))
 
                         ;; (println 'onset: os mm (- os mm2) mm2)
                         
@@ -494,7 +493,6 @@
 (define beat-loop
   (let ((cnt 0) (allowreset #t))  
     (lambda (beat dur)
-      ;;(println "LED" (now))    
       (set! *key* (current_key))
       (set! *pcs* (current-pcs))
       (set! *low* (current_pitch_range_low))
@@ -502,7 +500,6 @@
       (set! *density* (current_density))
       (set! *polyphony* (current_polyphony_cnt))
       (set! *bpm* (current_bpm))
-      ;;(println 'key: *key* 'bpm: *bpm*)
       ;;(print_rhythm_bins)
       (if *osc:on*
           (begin 
@@ -510,7 +507,7 @@
             (io:osc:send (+ 5000 (*metro* beat)) addy1 "/CIMdisplay/tempoLED" 0)    
             (io:osc:send (now) addy1 "/CIMdisplay/bpm" (number->string *bpm*))
             (io:osc:send (now) addy1 "/CIMdisplay/keyRoot" (list-ref (list "C" "C#" "D" "Eb" "E" "F" "F#" "G" "Ab" "A" "Bb" "B" "C") (abs *key*)))
-            (io:osc:send (now) addy1 "/CIMdisplay/keyQuality" (if (< *key* 0) "Minor" "Major"))))      
+            (io:osc:send (now) addy1 "/CIMdisplay/keyQuality" (if (< *key* 0) "Minor" "Major"))))
       (if (or (<> lasttime (get_phase_time))
               (<> lastbpm *bpm*))
           (begin
@@ -552,7 +549,8 @@
         ;;     (begin 
         ;;       (playob 0 1 fmsynth (+ key 72) 70 (* .4 dur) 1.0 0.5)
         ;;       (playob 0 1 fmsynth (+ key 84) 50 (* .1 dur) 1.0 0.5)))
-        ;; (hplay (- 0 0.1) *midi-out* 96 40 0.1)        
+        ;; (hplay (- 0 0.1) *midi-out* 96 40 0.1)
+        
         (if (> (cim_get_pedal 3) 2)
             (if (= 0 (modulo beat (list-ref '(16 8 4 3 2 1) density_controller)))
                 (begin
@@ -598,7 +596,7 @@
 (reset_buffers)
 
 ;; density controller (half way)
-(cim_set_pedal 3 60)
+(cim_set_pedal 3 100)
 
 ;; recording (always on)
 (cim_set_pedal 2 127)

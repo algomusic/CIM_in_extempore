@@ -828,11 +828,11 @@
                          0 (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0)
                          0.0 100000.0)))
 
-(bind-func find_random_chunk
-  (lambda (gap homophonic start end d1 d2)
-    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
-                         start end
-                         d1 d2)))
+;; (bind-func find_random_chunk
+;;   (lambda (gap homophonic start end d1 d2)
+;;     (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
+;;                          start end
+;;                          d1 d2)))
 
 (bind-func find_random_chunk
   (lambda (gap homophonic start end)
