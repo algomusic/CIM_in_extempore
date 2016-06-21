@@ -12,6 +12,33 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;; (define with-dsp? (if (and (sys:cmdarg "audio")
+;;                            (not (string=? "0" (sys:cmdarg "audio"))))
+;;                       #t #f))
+
+;; (define with-sustain? (if (and (sys:cmdarg "sustain")
+;;                               (not (string=? "0" (sys:cmdarg "sustain"))))
+;;                           #t #f))
+
+;; (define with-midicc? (if (and (sys:cmdarg "midicc")
+;;                               (not (string=? "0" (sys:cmdarg "midicc"))))
+;;                           #t #f))
+
+;; (define with-osc? (if (and (sys:cmdarg "osc")
+;;                           (not (string=? "0" (sys:cmdarg "osc"))))
+;;                       #t #f))
+
+;; (define midi-out-port 
+;;   (if (not (sys:cmdarg "midi-out"))
+;;       0
+;;       (string->number (sys:cmdarg "midi-out"))))
+
+;; (define midi-in-port 
+;;   (if (not (sys:cmdarg "midi-in"))
+;;       0
+;;       (string->number (sys:cmdarg "midi-in"))))
+
+
 (define with-dsp? (if (or (string=? "" (sys:cmdarg "audio"))
                           (string=? "0" (sys:cmdarg "audio")))
                       #f #t))
