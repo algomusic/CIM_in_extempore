@@ -1,0 +1,7 @@
+cd /Users/s978684/Extempore-HEAD-install/extempore
+
+./extempore --device=1 --midi-out=2 --midi-in=2 --run=../../CIM_in_extempore/runner.xtm
+
+or
+
+./extempore --device=1 --midi-out=5 --midi-in=2 --run=/Users/s978684/CIM_in_extempore/runner.xtm
