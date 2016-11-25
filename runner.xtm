@@ -370,6 +370,38 @@
   (lambda (gap startidx endix)
     (num_chunks gap startidx endix)))
 
+(define CIM-density (vector 0 0 0 0 0 0 0 0 0))
+
+(vector-ref CIM-density 4)
+
+(define inc-CIM-density
+  (lambda()
+    (vector-set! CIM-density (- (vector-length CIM-density) 1)
+      (+ (vector-ref CIM-density (- (vector-length CIM-density) 1)) 1))))
+
+(define get-CIM-density
+  (lambda()
+    (let ((sum 0))
+      (dotimes (i (vector-length CIM-density))
+          (set! sum (+ sum (vector-ref CIM-density i))))
+      sum)))
+
+;(get-CIM-density)
+;(inc-CIM-density)
+
+(define beat-update-CIM-density
+  (lambda()
+    ;(println "Updating CIM density")
+    (dotimes (i (- (vector-length CIM-density) 1))
+      (vector-set! CIM-density i (vector-ref CIM-density (+ i 1))))
+    (vector-set! CIM-density (- (vector-length CIM-density) 1) 0)))
+
+;(beat-update-CIM-density)
+
+(define inc-CIM-density
+  (lambda ()
+    (set! (list-set CIM-denisty)))
+
 (define play-chunk
   (lambda (beat inst gap dcontrol)
     ;(println 'density (current_density) 'velocity (current_avg_velocity))
@@ -382,9 +414,10 @@
            (num (total_chunks gap 0 0))
                                         ;(lllllll (println 'num: num))
            ;gap homophonic startidx endidx upper lower (duration in beats)
-           (chunk (find_random_chunk_a gap 0.0 0 0 0.0 (if (< (current_density) .01)
-                                                              (* 4. dcontrol)
-                                                              (* 2. dcontrol))))
+           (chunk (find_random_chunk_a (+ (/ (random) 4.0) 0.1) 0.0 0 0 0.0 (random 5 20)))
+          ; (chunk (find_random_chunk_a gap 0.0 0 0 0.0 (if (< (current_density) .01)
+          ;                                                    (* 4. dcontrol)
+          ;                                                    (* 2. dcontrol))))
            (chunkkey (cim_chunk_key chunk))
            (cmaj? (if (= 1 (cim_key_major chunkkey)) #t #f))
            (ckey (cim_key_root chunkkey))
@@ -445,7 +478,8 @@
                         ;;                     scale)
                         ;;       (* 1.0 (cim_chunk_note_volume chunk i))
                         ;;       (* .7 (cim_chunk_note_duration chunk i)) 1.0 0.5)
-
+                        ;; CIM density count
+                        (inc-CIM-density)
                         ;;(hplay (+ 0.0 last-onset (if (< os .11) os (- os mm2))) ;; quantise
                         (hplay (+ last-onset os)  inst ;; no quantise
                                (pc:quantize (real->integer (+ (- key ckey)
@@ -553,11 +587,11 @@
       (set! total-beat beat)
       ;(let* ((maj? (if (< *key* 0) #f #t))
       ;       (key (if maj? *key* (modulo (* *key* -1) 12))))
-        (if (and (> (cim_get_pedal 4) 10) allowreset)
+        (if (and (> (cim_get_pedal 4) 0) allowreset)
             (begin
               (println "reset pedal")
-              (set! allowreset #f)
-              (reset_buffers)))
+              (set! allowreset #f)))
+              ;(reset_buffers)))
         (if (= 0 (cim_get_pedal 4))
             (begin
               (set! allowreset #t)))
@@ -577,7 +611,9 @@
         ;; (hplay (- 0 0.1) *midi-out* 96 40 0.1)
         (if (> (cim_get_pedal 3) 0)
             (if (= 0 (modulo beat (cim_get_pedal 3)))
-                  (play-chunk beat *midi-out* 2.5 (cim_get_pedal 3))))
+                  (play-chunk beat *midi-out* 0.3 (cim_get_pedal 3))))
+        ;(println "beat loop")
+        (beat-update-CIM-density)
       (callback (*metro* (+ beat (* 0.95 dur))) 'beat-loop (+ beat dur) dur))))
 
 ;; start main playback loop
@@ -630,21 +666,28 @@
 
 ;; vary playback frequency based on perfromer density
 ;; (cim_get_pedal 3 chunk play interval in beats
+(define CIM-playback-frequency 0)
+
 (define density-loop
   (lambda (beat dur)
-    (let ((den (current_density)))
-      (cond ((< den 0.1)
-              (cim_set_pedal 3 (random '(4 6 8))))
-            ((and (>= den 0.1) (< den 0.3))
-              (cim_set_pedal 3 (random '(4 6 8 12 16))))
-            ((>= den 0.3)
-              (cim_set_pedal 3 (random '(8 12 16)))))
-        (println 'density (now) den (cim_get_pedal 3)))
+    (let ((den (current_density))
+          (cimDen (get-CIM-density)))
+      (cond  ((>= den 0)
+              (if (and (= den 0) (< (random) 0.2))
+                (set! CIM-playback-frequency 0) ;;;
+                (set! CIM-playback-frequency 4))
+              (cond ((and (> cimDen 0) (< cimDen 20))
+                      (set! CIM-playback-frequency (max 1 (- CIM-playback-frequency 1))))
+                    ((and (> cimDen 30) (< cimDen 50))
+                      (set! CIM-playback-frequency (min 16 (+ CIM-playback-frequency 1))))
+                    ((> cimDen 50) (set! CIM-playback-frequency 0)))))
+      (cim_set_pedal 3 CIM-playback-frequency)
+      (println 'density (now) 'CIM (get-CIM-density) 'Hum den 'rate (cim_get_pedal 3)))
     (callback (*metro* (+ beat (* 0.95 dur))) 'density-loop (+ beat dur) dur)))
 
 ;(random '(120 120 100 100 80 70 40 20)))))
 
-(density-loop (*metro* 'get-beat 1) 16)
+(density-loop (*metro* 'get-beat 1) 8)
 
 ;; sustain pedal and panic pedal loop
 (define prev-sus 0)
@@ -692,6 +735,6 @@
                    (* v2 (sqrt (/ (* -2.0 (log s)) s)))))))))
 
 ;(randnd)
-
+(setCIMDefaultGapSize 1.0)
 ;; flush memory
 (reset_buffers)
