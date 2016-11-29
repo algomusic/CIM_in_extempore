@@ -12,29 +12,39 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define with-dsp? (if (or (string=? "" (sys:cmdarg "audio"))
-                          (string=? "0" (sys:cmdarg "audio")))
-                      #f #t))
 
-(define with-sustain? (if (or (string=? "" (sys:cmdarg "sustain"))
-                              (string=? "0" (sys:cmdarg "sustain")))
-                          #f #t))
+(define string-match
+  (lambda (a b)
+    (and (string? a) (string? b) (string=? a b))))
 
-(define with-midicc? (if (or (string=? "" (sys:cmdarg "midicc"))
-                             (string=? "0" (sys:cmdarg "midicc")))
-                         #f #t))
+(define with-dsp? (string-match "1" (sys:cmdarg "audio")))
+(define with-sustain? (string-match "1" (sys:cmdarg "sustain")))
+(define with-midicc? (string-match "1" (sys:cmdarg "midicc")))
+(define with-osc? (string-match "1" (sys:cmdarg "osc")))
 
-(define with-osc? (if (or (string=? "" (sys:cmdarg "osc"))
-                          (string=? "0" (sys:cmdarg "osc")))
-                      #f #t))
+;; (define with-dsp? (if (or (string-match "" (sys:cmdarg "audio"))
+;;                           (string-match "0" (sys:cmdarg "audio")))
+;;                       #f #t))
+
+;; (define with-sustain? (if (or (string-match "" (sys:cmdarg "sustain"))
+;;                               (string-match "0" (sys:cmdarg "sustain")))
+;;                           #f #t))
+
+;; (define with-midicc? (if (or (string-match "" (sys:cmdarg "midicc"))
+;;                              (string-match "0" (sys:cmdarg "midicc")))
+;;                          #f #t))
+
+;; (define with-osc? (if (or (string-match "" (sys:cmdarg "osc"))
+;;                           (string-match "0" (sys:cmdarg "osc")))
+;;                       #f #t))
 
 (define midi-out-port
-  (if (string=? "" (sys:cmdarg "midi-out"))
+  (if (string-match "" (sys:cmdarg "midi-out"))
       0
       (string->number (sys:cmdarg "midi-out"))))
 
 (define midi-in-port
-  (if (string=? "" (sys:cmdarg "midi-in"))
+  (if (string-match "" (sys:cmdarg "midi-in"))
       0
       (string->number (sys:cmdarg "midi-in"))))
 
@@ -51,7 +61,8 @@
 
 ;;(sys:load "../CIM_in_extempore/cimlib.xtm")
 ;(sys:load "/Users/andrew/Documents/code/CIM_in_extempore/cimlib.xtm")
-(sys:load "/Users/s978684/CIM_in_extempore-master/cimlib.xtm")
+;(sys:load "/Users/s978684/CIM_in_extempore-master/cimlib.xtm")
+(sys:load "/Users/s2805534/Documents/code/extempore/extempore-cim/CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/core/pc_ivl.xtm")
 (if with-dsp? (sys:load "libs/external/instruments_ext.xtm"))
 
