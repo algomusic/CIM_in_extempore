@@ -808,53 +808,53 @@
           null
           chunk))))
 
-(bind-func find_random_chunk
-  (lambda (gap homophonic d1 d2 history)
-    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
-                       (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0) (* -1 history)
-                       d1 d2)))
-
-(bind-func find_random_chunk
-  (lambda (gap homophonic d1 d2)
-    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
-                         0 (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0)
-                         d1 d2)))
-
-(bind-func find_random_chunk
-  (lambda (gap homophonic history)
-    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
-                         (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0) (* -1 history)
-                         0.0 100000.0)))
-
-(bind-func find_random_chunk
-  (lambda (gap homophonic)
-    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
-                         0 (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0)
-                         0.0 100000.0)))
-
-(bind-func find_random_chunk
-  (lambda (gap)
-    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap 0.0
-                         0 (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0)
-                         0.0 100000.0)))
+;; (bind-func find_random_chunk
+;;   (lambda (gap homophonic d1 d2 history)
+;;     (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
+;;                        (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0) (* -1 history)
+;;                        d1 d2)))
 
 ;; (bind-func find_random_chunk
-;;   (lambda (gap homophonic start end d1 d2)
+;;   (lambda (gap homophonic d1 d2)
 ;;     (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
-;;                          start end
+;;                          0 (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0)
 ;;                          d1 d2)))
 
-(bind-func find_random_chunk
-  (lambda (gap homophonic start end)
-    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
-                         start end
-                         0.0 100000.0)))
+;; (bind-func find_random_chunk
+;;   (lambda (gap homophonic history)
+;;     (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
+;;                          (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0) (* -1 history)
+;;                          0.0 100000.0)))
 
-(bind-func find_random_chunk
-  (lambda (gap start end)
-    (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap 0.0
-                         start end
-                         0.0 100000.0)))
+;; (bind-func find_random_chunk
+;;   (lambda (gap homophonic)
+;;     (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
+;;                          0 (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0)
+;;                          0.0 100000.0)))
+
+;; (bind-func find_random_chunk
+;;   (lambda (gap)
+;;     (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap 0.0
+;;                          0 (if (> CIMNoteBufferIdx 0) (- CIMNoteBufferIdx 1) 0)
+;;                          0.0 100000.0)))
+
+;; ;; (bind-func find_random_chunk
+;; ;;   (lambda (gap homophonic start end d1 d2)
+;; ;;     (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
+;; ;;                          start end
+;; ;;                          d1 d2)))
+
+;; (bind-func find_random_chunk
+;;   (lambda (gap homophonic start end)
+;;     (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap homophonic
+;;                          start end
+;;                          0.0 100000.0)))
+
+;; (bind-func find_random_chunk
+;;   (lambda (gap start end)
+;;     (find_random_chunk:[CIMChunk*,double,double,i64,i64,double,double]* gap 0.0
+;;                          start end
+;;                          0.0 100000.0)))
 
 (bind-func dump_chunks
   (lambda (gap:double)
