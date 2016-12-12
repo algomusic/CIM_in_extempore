@@ -12,46 +12,121 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define with-dsp? (if (or (string=? "" (sys:cmdarg "audio"))
-                          (string=? "0" (sys:cmdarg "audio")))
-                      #f #t))
 
-(define with-sustain? (if (or (string=? "" (sys:cmdarg "sustain"))
-                              (string=? "0" (sys:cmdarg "sustain")))
-                          #f #t))
+;; dependencies
+;(sys:load "libs/external/portmidi.xtm")
+(sys:load "libs/external/midi_input.xtm")
 
-(define with-midicc? (if (or (string=? "" (sys:cmdarg "midicc"))
-                             (string=? "0" (sys:cmdarg "midicc")))
-                         #f #t))
 
-(define with-osc? (if (or (string=? "" (sys:cmdarg "osc"))
-                          (string=? "0" (sys:cmdarg "osc")))
-                      #f #t))
+;;;;;;;;;;;;;;;;;;;;; command line argument parsing ;;;;;;;;;;;;;;;;;;;;
+(define cmd-arg-true
+  (lambda (switch)
+    (let ((value (sys:cmdarg switch)))
+    (cond
+     ((string? value)
+      (cond
+       ((or (string=? value "") (string=? value "0")
+            (string=? value "false") (string=? value "FALSE") (string=? value "False")
+            (string=? value "NO" "no")) #f)
+       (else #t)))
+     (else #f)))))
+
+(define with-dsp? (cmd-arg-true "audio"))
+(define with-sustain? (cmd-arg-true "sustain"))
+(define with-midicc? (cmd-arg-true "midicc"))
+(define with-osc? (cmd-arg-true "osc"))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; MIDI Setup ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;; Some helpful functions for using MIDI devices by name ;;;
+(bind-func midi_input_port_id:[i32,i8*]*
+  (lambda (port_name)
+    (let* ((n:i32 (Pm_CountDevices))
+           (loop:[i32,i32]*
+            (lambda (i:i32)
+              (cond
+               ((and (<= (i64toi32 0) i) (< i n))
+                (let* ((info:PmDeviceInfo* (Pm_GetDeviceInfo i))
+                       (name:i8* (tref info 2))
+                       (input:bool (= (i64toi32 1) (tref info 3)))
+                       (a (strlen name)) (b (strlen port_name)) (c (if (< a b) a b)))
+                  (cond
+                   ((and input (= (i64toi32 0) (strncmp name port_name c))) i)
+                   (else
+                    (loop (+ i (i64toi32 1)))))))
+               (else
+                (printf "No MIDI input port found with name %s\n" port_name)
+                (i64toi32 -1))))))
+        (loop (i64toi32 0)))))
+                  
+
+(bind-func midi_output_port_id:[i32,i8*]*
+  (lambda (port_name)
+    (let* ((n:i32 (Pm_CountDevices))
+           (loop:[i32,i32]*
+            (lambda (i:i32)
+              (cond
+               ((and (<= (i64toi32 0) i) (< i n))
+                (let* ((info:PmDeviceInfo* (Pm_GetDeviceInfo i))
+                       (name:i8* (tref info 2))
+                       (output:bool (= (i64toi32 1) (tref info 4)))
+                       (a (strlen name)) (b (strlen port_name)) (c (if (< a b) a b)))
+                  (cond
+                   ((and output (= (i64toi32 0) (strncmp name port_name c))) i)
+                   (else
+                    (loop (+ i (i64toi32 1)))))))
+               (else
+                (printf "No MIDI output port found with name %s\n" port_name)
+                (i64toi32 -1))))))
+        (loop (i64toi32 0)))))
+
+
+(bind-func print_midi_port_info:[void,i32]*
+  (lambda (id)
+    (let ((info:PmDeviceInfo* (Pm_GetDeviceInfo id)))
+      (print info)
+      void)))
+
 
 (define midi-out-port
-  (if (string=? "" (sys:cmdarg "midi-out"))
-      0
-      (string->number (sys:cmdarg "midi-out"))))
+  (if (cmd-arg-true "midi-out")
+      (let* ((value (sys:cmdarg "midi-out"))
+             (id (midi_output_port_id value)))
+        (if (<= 0 id) id (string->number value)))
+      1))
+
 
 (define midi-in-port
-  (if (string=? "" (sys:cmdarg "midi-in"))
-      0
-      (string->number (sys:cmdarg "midi-in"))))
+  (if (cmd-arg-true "midi-in")
+      (let* ((value (sys:cmdarg "midi-in"))
+             (id (midi_input_port_id value)))
+        (if (<= 0 id) id (string->number value)))
+      1))
 
-;;
-(println "MIDI out port is" midi-out-port "MIDI in port is" midi-in-port)
+
+(define (print-midi-setup)
+  (print "MIDI out port is device number ")
+  (print midi-out-port) (print " ")
+  (print_midi_port_info midi-out-port)
+  (println)
+  (print "MIDI in  port is device number ")
+  (print midi-in-port) (print " ")
+  (print_midi_port_info midi-in-port)
+  (println))
+
+(print-midi-setup)
+
 
 ;; midi initialization first!
 ;; cimlib overloads certain midi input funcs
-(sys:load "libs/external/midi_input.xtm")
-
-(set_midi_in midi-in-port)
-
+(if (<> 0 midi-in-port) (set_midi_in midi-in-port))
 (define *midi-out* (pm_create_output_stream midi-out-port))
 
 ;;(sys:load "../CIM_in_extempore/cimlib.xtm")
 ;(sys:load "/Users/andrew/Documents/code/CIM_in_extempore/cimlib.xtm")
-(sys:load "/Users/s978684/CIM_in_extempore-master/cimlib.xtm")
+;(sys:load "/Users/s978684/CIM_in_extempore-master/cimlib.xtm")
+(sys:load "/Users/s2805534/Documents/code/extempore/extempore-cim/CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/core/pc_ivl.xtm")
 (if with-dsp? (sys:load "libs/external/instruments_ext.xtm"))
 
@@ -372,8 +447,6 @@
 
 (define CIM-density (vector 0 0 0 0 0 0 0 0 0))
 
-(vector-ref CIM-density 4)
-
 (define inc-CIM-density
   (lambda()
     (vector-set! CIM-density (- (vector-length CIM-density) 1)
@@ -386,9 +459,6 @@
           (set! sum (+ sum (vector-ref CIM-density i))))
       sum)))
 
-;(get-CIM-density)
-;(inc-CIM-density)
-
 (define beat-update-CIM-density
   (lambda()
     ;(println "Updating CIM density")
@@ -396,11 +466,6 @@
       (vector-set! CIM-density i (vector-ref CIM-density (+ i 1))))
     (vector-set! CIM-density (- (vector-length CIM-density) 1) 0)))
 
-;(beat-update-CIM-density)
-
-(define inc-CIM-density
-  (lambda ()
-    (set! (list-set CIM-denisty)))
 
 (define play-chunk
   (lambda (beat inst gap dcontrol)
@@ -414,7 +479,7 @@
            (num (total_chunks gap 0 0))
                                         ;(lllllll (println 'num: num))
            ;gap homophonic startidx endidx upper lower (duration in beats)
-           (chunk (find_random_chunk_a (+ (/ (random) 4.0) 0.1) 0.0 0 0 0.0 (random 5 20)))
+           (chunk (find_random_chunk (+ (/ (random) 4.0) 0.1) 0.0 0 0 0.0 (exact->inexact (random 5 20))))
           ; (chunk (find_random_chunk_a gap 0.0 0 0 0.0 (if (< (current_density) .01)
           ;                                                    (* 4. dcontrol)
           ;                                                    (* 2. dcontrol))))
@@ -690,20 +755,20 @@
 (density-loop (*metro* 'get-beat 1) 8)
 
 ;; sustain pedal and panic pedal loop
-(define prev-sus 0)
+;; (define prev-sus 0)
 
-(define sus-loop
-  (lambda ()
-    (let ((val (get_sus_pos)))
-      (cond ((<> val prev-sus)
-            (pm_send *midi-out* *midi-cc* 0 64 val) ;; check pedal polarity (- 127 val)
-            (set! prev-sus val))))
-      ;(println (get_panic_pos))
-      (if (= (get_panic_pos) 127) (panic))
-    (callback (+ (now) 10000) 'sus-loop)))
+;; (define sus-loop
+;;   (lambda ()
+;;     (let ((val (get_sus_pos)))
+;;       (cond ((<> val prev-sus)
+;;             (pm_send *midi-out* *midi-cc* 0 64 val) ;; check pedal polarity (- 127 val)
+;;             (set! prev-sus val))))
+;;       ;(println (get_panic_pos))
+;;       (if (= (get_panic_pos) 127) (panic))
+;;     (callback (+ (now) 10000) 'sus-loop)))
 
-;; start it
-(sus-loop)
+;; ;; start it
+;; (sus-loop)
 
 ;; recording (always on)
 (cim_set_pedal 2 127)
@@ -733,6 +798,13 @@
                 (* v1 (sqrt (/ (* -2.0 (log s)) s))))
             (begin (set! phase (- 1 phase))
                    (* v2 (sqrt (/ (* -2.0 (log s)) s)))))))))
+
+
+(bind-func binomial_rng:[double]*
+  (lambda ()
+    (/ (+ (random) (random)) 2.0)))
+
+
 
 ;(randnd)
 (setCIMDefaultGapSize 1.0)
