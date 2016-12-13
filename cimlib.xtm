@@ -623,7 +623,7 @@
   (lambda (val:double)
     CIMDefaultGapSize))
 
-;(setCIMDefaultGapSize 2.0)
+(setCIMDefaultGapSize 1.0)
 
 (bind-func cim_note_closure
   (lambda (a:CIMNote* b:CIMNote* c:CIMNote*)
@@ -1004,6 +1004,7 @@
 
 (bind-func record_note
   (lambda (time type chan:i8 a b)
+    (println 'recording-note time type chan a b)
     (if (and (= type MIDI_CC) (<> a 64)) -1  ;; sustain pedal
         (let ((note (retrieve_note (aref CIMNoteDurResolver (i8toi64 a)))))
           (if (and (not (null? note))
@@ -2155,7 +2156,7 @@
 ;;
 
 (bind-val CIM_LOAD_TIME double 0.0)
-(bind-val CIM_PRINT_MIDI_MESSAGES i1 0)
+(bind-val CIM_PRINT_MIDI_MESSAGES i1 1)
 
 (bind-func cim_print_midi_messages
   (lambda (x)

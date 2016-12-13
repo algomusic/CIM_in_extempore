@@ -59,7 +59,7 @@
                 (printf "No MIDI input port found with name %s\n" port_name)
                 (i64toi32 -1))))))
         (loop (i64toi32 0)))))
-                  
+
 
 (bind-func midi_output_port_id:[i32,i8*]*
   (lambda (port_name)
@@ -352,6 +352,7 @@
 
 (define transform-pitches
   (lambda (lst chnkKey)
+    (println 'transforming-pitches lst)
     (if (and (not (null? lst))
               (cl:find-if (lambda (x) (>= x 0)) lst))
       (let ((choice (random 0 4)))
@@ -466,6 +467,10 @@
       (vector-set! CIM-density i (vector-ref CIM-density (+ i 1))))
     (vector-set! CIM-density (- (vector-length CIM-density) 1) 0)))
 
+;(beat-update-CIM-density)
+
+(define inc-CIM-density
+  (lambda ()
 
 (define play-chunk
   (lambda (beat inst gap dcontrol)
@@ -611,7 +616,6 @@
 
 (define lasttime 0)
 (define lastbpm 120)
-
 
 (define beat-loop
   (let ((cnt 0) (allowreset #t))
@@ -804,9 +808,7 @@
   (lambda ()
     (/ (+ (random) (random)) 2.0)))
 
-
-
 ;(randnd)
-(setCIMDefaultGapSize 1.0)
+;(setCIMDefaultGapSize 1.0)
 ;; flush memory
 (reset_buffers)
