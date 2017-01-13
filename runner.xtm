@@ -125,8 +125,8 @@
 
 ;;(sys:load "../CIM_in_extempore/cimlib.xtm")
 ;(sys:load "/Users/andrew/Documents/code/CIM_in_extempore/cimlib.xtm")
-;(sys:load "/Users/s978684/CIM_in_extempore-master/cimlib.xtm")
-(sys:load "/Users/s2805534/Documents/code/extempore/extempore-cim/CIM_in_extempore/cimlib.xtm")
+(sys:load "/Users/s978684/CIM_in_extempore/cimlib.xtm")
+;(sys:load "/Users/s2805534/Documents/code/extempore/extempore-cim/CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/core/pc_ivl.xtm")
 (if with-dsp? (sys:load "libs/external/instruments_ext.xtm"))
 
@@ -468,9 +468,6 @@
     (vector-set! CIM-density (- (vector-length CIM-density) 1) 0)))
 
 ;(beat-update-CIM-density)
-
-(define inc-CIM-density
-  (lambda ()
 
 (define play-chunk
   (lambda (beat inst gap dcontrol)

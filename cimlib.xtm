@@ -1003,9 +1003,9 @@
 
 
 (bind-func record_note
-  (lambda (time type chan:i8 a b)
+  (lambda (time type chan:i8 a:i8 b:i8)
     (println 'recording-note time type chan a b)
-    (if (and (= type MIDI_CC) (<> a 64)) -1  ;; sustain pedal
+    (if (and (= type MIDI_CC) (<> a 64:i8)) -1  ;; sustain pedal
         (let ((note (retrieve_note (aref CIMNoteDurResolver (i8toi64 a)))))
           (if (and (not (null? note))
                    (<> type MIDI_CC)
