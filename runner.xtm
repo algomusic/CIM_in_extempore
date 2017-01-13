@@ -60,7 +60,7 @@
                 (atoi port_name)
                 )))))
         (loop (i64toi32 0)))))
-                  
+
 
 (bind-func midi_output_port_id:[i32,i8*]*
   (lambda (port_name)
@@ -133,8 +133,8 @@
 
 ;;(sys:load "../CIM_in_extempore/cimlib.xtm")
 ;(sys:load "/Users/andrew/Documents/code/CIM_in_extempore/cimlib.xtm")
-;(sys:load "/Users/s978684/CIM_in_extempore-master/cimlib.xtm")
-(sys:load "/Users/s2805534/Documents/code/extempore/extempore-cim/CIM_in_extempore/cimlib.xtm")
+(sys:load "/Users/s978684/CIM_in_extempore/cimlib.xtm")
+;(sys:load "/Users/s2805534/Documents/code/extempore/extempore-cim/CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/core/pc_ivl.xtm")
 (if with-dsp? (sys:load "libs/external/instruments_ext.xtm"))
 
@@ -363,6 +363,7 @@
 
 (define transform-pitches
   (lambda (lst chnkKey)
+    (println 'transforming-pitches lst)
     (if (and (not (null? lst))
               (cl:find-if (lambda (x) (>= x 0)) lst))
       (let ((choice (random 0 4)))
@@ -488,6 +489,7 @@
       (vector-set! CIM-density i (vector-ref CIM-density (+ i 1))))
     (vector-set! CIM-density (- (vector-length CIM-density) 1) 0)))
 
+;(beat-update-CIM-density)
 
 (define select-chunk
   (lambda (desired-length forbidden-range-min forbidden-range-max)
@@ -554,7 +556,6 @@
 
 (define lasttime 0)
 (define lastbpm 120)
-
 
 (define beat-loop
   (let ((cnt 0) (allowreset #t))
@@ -757,9 +758,8 @@
 ;; start sections off with initial call
 (next_cim_section)
 
-
 ;(randnd)
-(setCIMDefaultGapSize 1.0)
+;(setCIMDefaultGapSize 1.0)
 ;; flush memory
 (reset_buffers)
 
