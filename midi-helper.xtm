@@ -1,0 +1,77 @@
+(sys:load "libs/external/rtmidi.xtm")
+
+(bind-func midi_available_inputs:[i8*]*
+  (lambda ()
+    (let* ((dev (midi_new_indevice))
+           (num_ports (getInPortCount dev))
+           (output:i8* (zalloc 4096))
+           (tmp:i8* output)
+           (i:i64 0))
+      (dotimes (i num_ports)
+        (set! tmp (pref-ptr tmp (sprintf tmp "Port %lld: %s\n" i (getInPortName dev i)))))
+      (midi_delete_indevice dev)
+      (free dev)
+      (printf "%s" output)
+      output)))
+
+(bind-func midi_available_outputs:[i8*]*
+  (lambda ()
+    (let* ((dev (midi_new_outdevice))
+           (num_ports (getOutPortCount dev))
+           (output:i8* (zalloc 4096))
+           (tmp:i8* output)
+           (i:i64 0))
+      (dotimes (i num_ports)
+        (set! tmp (pref-ptr tmp (sprintf tmp "Port %lld: %s\n" i (getOutPortName dev i)))))
+      (midi_delete_outdevice dev)
+      (free dev)
+      (printf "%s" output)
+      output)))
+
+(bind-func midi_input_shazam:[midi_in_device*,i8*]*
+  (lambda (portname:i8*)
+    (let ((pdev:midi_in_device** (halloc)))
+      (pset! pdev 0 (midi_new_indevice))
+      (let ((num_ports (getInPortCount (pref pdev 0)))
+            (i:i64 0))
+        (dotimes (i num_ports)
+          (if (= (strcmp portname (getInPortName (pref pdev 0) i)) (i64toi32 0))
+              (let ((success (openInPort (pref pdev 0) i portname)))
+                (if (= (i64toi32 0) success)
+                    (printf "Successfully opened input port: %s\n" portname)
+                    (printf "Failed to open input port: %s\n" portname))))))
+      (pref pdev 0))))
+
+
+(bind-func midi_output_shazam:[midi_out_device*,i8*]*
+  (lambda (portname:i8*)
+    (let ((pdev:midi_out_device** (halloc)))
+      (pset! pdev 0 (midi_new_outdevice))
+      (let ((num_ports (getOutPortCount (pref pdev 0)))
+            (i:i64 0))
+        (dotimes (i num_ports)
+          (if (= (strcmp portname (getOutPortName (pref pdev 0) i)) (i64toi32 0))
+              (let ((success (openOutPort (pref pdev 0) i portname)))
+                (if (= (i64toi32 0) success)
+                    (printf "Successfully opened output port: %s\n" portname)
+                    (printf "Failed to open output port: %s\n" portname))))))
+      (pref pdev 0))))
+
+(midi_available_inputs)
+(define midi_input_port (midi_input_shazam "USB MIDI Interface"))
+(define midi_output_port (midi_output_shazam "USB MIDI Interface"))
+
+;; write a midi receiver which will
+;; use control change messages to change
+;; the pitch of an oscillator
+(bind-func midi_receive
+  (let ((type:i8 0) (chan:i8 0) (a:i8 0) (b:float 0.))
+    (lambda (time:double len:i64 msg:i8*)
+      (set! type (>> (pref msg 0) 4))
+      (set! chan (& (pref msg 0) 15))
+      (set! a (pref msg 1))
+      (set! b (i8tof (pref msg 2)))
+      (println type chan a b)
+      void)))
+
+(midi_register_device midi_input_port "midi_receive")

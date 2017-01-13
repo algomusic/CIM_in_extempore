@@ -1,0 +1,3 @@
+(sys:load "libs/external/portmidi.xtm")
+(pm_print_devices)
+(quit 0)

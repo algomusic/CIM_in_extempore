@@ -56,8 +56,9 @@
                    (else
                     (loop (+ i (i64toi32 1)))))))
                (else
-                (printf "No MIDI input port found with name %s\n" port_name)
-                (i64toi32 -1))))))
+                ;;(printf "No MIDI input port found with name %s\n" port_name)
+                (atoi port_name)
+                )))))
         (loop (i64toi32 0)))))
 
 
@@ -77,8 +78,8 @@
                    (else
                     (loop (+ i (i64toi32 1)))))))
                (else
-                (printf "No MIDI output port found with name %s\n" port_name)
-                (i64toi32 -1))))))
+                ;;(printf "No MIDI output port found with name %s\n" port_name)
+                (atoi port_name))))))
         (loop (i64toi32 0)))))
 
 
@@ -89,7 +90,7 @@
       void)))
 
 
-(define midi-out-port
+(define midi-out-port-id
   (if (cmd-arg-true "midi-out")
       (let* ((value (sys:cmdarg "midi-out"))
              (id (midi_output_port_id value)))
@@ -97,7 +98,7 @@
       1))
 
 
-(define midi-in-port
+(define midi-in-port-id
   (if (cmd-arg-true "midi-in")
       (let* ((value (sys:cmdarg "midi-in"))
              (id (midi_input_port_id value)))
@@ -107,12 +108,12 @@
 
 (define (print-midi-setup)
   (print "MIDI out port is device number ")
-  (print midi-out-port) (print " ")
-  (print_midi_port_info midi-out-port)
+  (print midi-out-port-id) (print " ")
+  (print_midi_port_info midi-out-port-id)
   (println)
   (print "MIDI in  port is device number ")
-  (print midi-in-port) (print " ")
-  (print_midi_port_info midi-in-port)
+  (print midi-in-port-id) (print " ")
+  (print_midi_port_info midi-in-port-id)
   (println))
 
 (print-midi-setup)
@@ -120,8 +121,15 @@
 
 ;; midi initialization first!
 ;; cimlib overloads certain midi input funcs
-(if (<> 0 midi-in-port) (set_midi_in midi-in-port))
-(define *midi-out* (pm_create_output_stream midi-out-port))
+(if (<> 0 midi-in-port-id) (set_midi_in midi-in-port-id))
+(define *midi-out* (pm_create_output_stream midi-out-port-id))
+(bind-val midi_out PmStream*)
+(bind-func midi_out_in_xtlang:[void,i8*]*
+  (lambda (ptr:i8*)
+    (set! midi_out (cast ptr PmStream*))
+    void))
+(midi_out_in_xtlang *midi-out*)
+($ (println midi_out))
 
 ;;(sys:load "../CIM_in_extempore/cimlib.xtm")
 ;(sys:load "/Users/andrew/Documents/code/CIM_in_extempore/cimlib.xtm")
@@ -229,7 +237,7 @@
 
 (define cim_f64->list
   (lambda (a)
-    (let ((size (cim_f64_size a))
+    (let* ((size (cim_f64_size a))
           (lst (make-list-with-proc
                 size
                 (lambda (i)
@@ -238,7 +246,7 @@
 
 (define list->cim_f64
   (lambda (l)
-    (let ((size (length l))
+    (let* ((size (length l))
           (a (cim_f64_create size)))
       (for-each (lambda (x i)
                   (cim_f64_set a i (* 1.0 x)))
@@ -247,7 +255,7 @@
 
 (define cim_i64->list
   (lambda (a)
-    (let ((size (cim_i64_size a))
+    (let* ((size (cim_i64_size a))
           (lst (make-list-with-proc
                 size
                 (lambda (i)
@@ -256,7 +264,7 @@
 
 (define list->cim_i64
   (lambda (l)
-    (let ((size (length l))
+    (let* ((size (length l))
           (a (cim_i64_create size)))
       (for-each (lambda (x i)
                   (cim_i64_set a i (real->integer x)))
@@ -268,40 +276,40 @@
 ;; cim chunk helpers
 ;;
 
-;; start with a default db
-(define *DB* (list (cim_db_create 100)))
+;; ;; start with a default db
+;; (define *DB* (list (cim_db_create 100)))
 
-;; get the current db
-(define db
-  (lambda ()
-    (car *DB*)))
+;; ;; get the current db
+;; (define db
+;;   (lambda ()
+;;     (car *DB*)))
 
-;; push a new db onto the stack
-(define push-db
-  (lambda ()
-    (set! *DB* (cons (cim_db_create 100) *DB*))
-    (car *DB*)))
+;; ;; push a new db onto the stack
+;; (define push-db
+;;   (lambda ()
+;;     (set! *DB* (cons (cim_db_create 100) *DB*))
+;;     (car *DB*)))
 
-;; pop a db off the stack (probably don't need to do this)
-(define pop-db
-  (lambda ()
-    (if (null? *DB*) *DB*
-        (begin
-          (set! *DB* (cdr *DB*))
-          (if (null? *DB*) *DB*
-              (car *DB*))))))
+;; ;; pop a db off the stack (probably don't need to do this)
+;; (define pop-db
+;;   (lambda ()
+;;     (if (null? *DB*) *DB*
+;;         (begin
+;;           (set! *DB* (cdr *DB*))
+;;           (if (null? *DB*) *DB*
+;;               (car *DB*))))))
 
-;; return an old DB (i.e. any db by index)
-(define old-db
-  (lambda (idx)
-    (if (< idx (length *DB*))
-        (list-ref *DB* idx)
-        #f)))
+;; ;; return an old DB (i.e. any db by index)
+;; (define old-db
+;;   (lambda (idx)
+;;     (if (< idx (length *DB*))
+;;         (list-ref *DB* idx)
+;;         #f)))
 
-;; updates the *current* db (i.e. (car *DB*))
-(define update-db
-  (lambda ()
-    (cim_db_update_b (car *DB*))))
+;; ;; updates the *current* db (i.e. (car *DB*))
+;; (define update-db
+;;   (lambda ()
+;;     (cim_db_update_b (car *DB*))))
 
 
 ;; where returned list will be
@@ -347,6 +355,9 @@
 (define *pcs* '())
 (define *polyphony* 0)
 
+(define *cim-phrase-overlap-factor* 1.0)
+;(define *cim-current-repeat-period* 1)
+
 ;; pitch transformations
 (define pitch-list '(60)) ;; start with dummy data
 
@@ -356,12 +367,12 @@
     (if (and (not (null? lst))
               (cl:find-if (lambda (x) (>= x 0)) lst))
       (let ((choice (random 0 4)))
-        (print lst 'transform: (now) choice '->)
+        ;;(print lst 'transform: (now) choice '->)
         (case choice
           ((0) (set! pitch-list lst)) ;; no change
           ((1) (let ((p1 (car (cl:remove-if (lambda (x) (< x 0)) lst)))) ;; invert
                  (set! pitch-list (map (lambda (i) (if (>= i 0) (+ p1 (- p1 i)) i)) lst))))
-          ((2) (set! pitch-list (map (lambda (i) (if (> i 48) (+ i (real->integer (* (randnd) 2))) i)) lst))) ;; jitter
+          ((2) (set! pitch-list (map (lambda (i) (max 21 (min 120 (if (> i 48) (+ i (real->integer (* (randnd) 2))) i)))) lst))) ;; jitter
           ((3) (let* ((p1 (car (cl:remove-if (lambda (x) (< x 0)) lst))) ;; transpose and jitter a bit
                      (trans (random (cond ((> p1 84)
                                             '(-24 -12 0 -5))
@@ -370,9 +381,9 @@
                                           (else '(0 2 -2 7 -5 12 -12))))))
                   (set! pitch-list (map (lambda (i) (if (> i 40) (+ i trans (real->integer (* (randnd) 2))) i)) lst)))))
         ;; thin out lower pitches
-        (set! pitch-list (map (lambda (i) (if (< (random) (- 1 (/ i 55.0))) -1 i)) pitch-list))
+        ;;(set! pitch-list (map (lambda (i) (if (< (random) (- 1 (/ i 55.0))) -1 i)) pitch-list))
         ;; thin out a bit
-        (set! pitch-list (map (lambda (i) (if (< (random) 0.1) -1 i)) pitch-list))
+        ;;(set! pitch-list (map (lambda (i) (if (< (random) 0.1) -1 i)) pitch-list))
         ;; constrain to 88 note piano range
         (set! pitch-list (map (lambda (i)
                               (cond ((> i 120) (- i 24))
@@ -380,11 +391,13 @@
                                     ((and (>= i 0) (< i 12)) (+ i 24))
                                     ((and (>= i 13) (< i 24)) (+ i 12))
                                     (else i))) pitch-list))
-        (println pitch-list)))))
+        ;(println pitch-list)
+        ))))
 
 ;(set! pitch-list (map (lambda (i) (if (>= i 0) 60 i)) lst))))
 ;;(- 1 (/ 40 50.0))
 ;;(transform-pitches pitch-list)
+
 
 (define get-pitches-from-chunk
   (lambda (chnk)
@@ -410,6 +423,15 @@
                       (callback (+ time dur) 'pm_send device *midi-note-off* channel pitch 0)
                       (callback (+ time dur) 'pm_send device *midi-note-off* channel pitch 0))))
             (vector-set! notes pitch (+ time duration)))))))
+
+
+;; simple playnote
+(define simple-play-note
+  (lambda (time device pitch velocity dur channel)
+    (callback time 'pm_send device *midi-note-on* channel pitch velocity)
+    (callback (+ time dur) 'pm_send device *midi-note-off* channel pitch 0)))
+
+(simple-play-note (now) *midi-out* 60 100 44100 0)
 
 
 ;; playback
@@ -438,18 +460,18 @@
 ;; bugs full gas stops playback (i.e p3 > 120)
 ;; latest phrase never available for playback.
 
-(bind-func find_random_chunk_call
-  (lambda (a b c d e f)
-    (find_random_chunk a b c d e f)))
+;; (bind-func find_random_chunk_call
+;;   (lambda (a b c d e f)
+;;     (find_random_chunk a b c d e f)))
 
-(bind-func total_chunks
-  (lambda (gap startidx endix)
-    (num_chunks gap startidx endix)))
+;; (bind-func total_chunks
+;;   (lambda (gap startidx endix)
+;;     (num_chunks gap startidx endix)))
 
 (define CIM-density (vector 0 0 0 0 0 0 0 0 0))
 
 (define inc-CIM-density
-  (lambda()
+  (lambda ()
     (vector-set! CIM-density (- (vector-length CIM-density) 1)
       (+ (vector-ref CIM-density (- (vector-length CIM-density) 1)) 1))))
 
@@ -469,23 +491,19 @@
 
 ;(beat-update-CIM-density)
 
+(define select-chunk
+  (lambda (desired-length forbidden-range-min forbidden-range-max)
+    (let* ((chunk (new_find_chunk desired-length forbidden-range-min forbidden-range-max 0)))
+      (if (not (null? chunk))
+          (let ((actual-length (cim_chunk_duration chunk))
+                (num-notes (cim_chunk_size chunk)))
+            (if (= num-notes 0) (cim_chunk_invalidate chunk))))
+      chunk)))
+
+
 (define play-chunk
-  (lambda (beat inst gap dcontrol)
-    ;(println 'density (current_density) 'velocity (current_avg_velocity))
-    ;; gap homophonic start end d1 d2
-    ;; so defaults to accept everything in find_random (with 1.5s gap)
-    ;; (find_random_chunk_a 1.5 0.0 0 0 0.0 10000.0)
-    (let* (;(chunk (find_random_chunk_a gap (if (> *polyphony* 2) -10.0 0.0) 0 0 1.0 (* 2.0 dcontrol))) ;;1000.0))
-           (last_idx (cim_note_index (last_note)))
-                                        ;(lllll (println 'last_note_index: last_idx))
-           (num (total_chunks gap 0 0))
-                                        ;(lllllll (println 'num: num))
-           ;gap homophonic startidx endidx upper lower (duration in beats)
-           (chunk (find_random_chunk (+ (/ (random) 4.0) 0.1) 0.0 0 0 0.0 (exact->inexact (random 5 20))))
-          ; (chunk (find_random_chunk_a gap 0.0 0 0 0.0 (if (< (current_density) .01)
-          ;                                                    (* 4. dcontrol)
-          ;                                                    (* 2. dcontrol))))
-           (chunkkey (cim_chunk_key chunk))
+  (lambda (chunk beat inst)
+    (let* ((chunkkey (cim_chunk_key chunk))
            (cmaj? (if (= 1 (cim_key_major chunkkey)) #t #f))
            (ckey (cim_key_root chunkkey))
            (size (cim_chunk_size chunk))
@@ -493,113 +511,38 @@
            (last-onset 0.0)
            (maj? (if (< *key* 0) #f #t))
            (key (if maj? *key* (modulo (* *key* -1) 12)))
-           (scale (pc:scale key (if maj? 'ionian 'aeolian)))
+           ;;(scale (pc:scale key (if maj? 'ionian 'aeolian)))
+           (scale (cim_pcs->list (get_pitch_class_set)))
+           ;;(scale pitch-list)
            (note-not-played? #t))
       (if *osc:on*
           (begin
             (io:osc:send (*metro* beat) addy1 "/CIMdisplay/segs" (number->string num))
             (io:osc:send (*metro* beat) addy1 "/CIMdisplay/tempoPBS" 1)
             (io:osc:send (+ 5000 (*metro* beat)) addy1 "/CIMdisplay/tempoPBS" 0)))
-      ;; (println)
-      ;; (println 'diff: ckey cmaj? key maj?)
-      ;;(println '-----------------------)
-      ;;(CIMChunk_print chunk)
-      ;;(println)
-      ;;(println 'scale: scale 'bpm: )
-      ;;(print_chunk_notes idx size)
-      ;(get-pitches-from-chunk chunk)
       (transform-pitches (get-pitches-from-chunk chunk) chunkkey)
-      ;; transpose into current key if required
-      ;;(get-pitches-from-chunk chunk)
-      ;;(println 'got-pitches)
       (if (= (cim_chunk_valid chunk) 1)
           (dotimes (i size)
-            (if (and with-midicc? (< (real->integer (list-ref pitch-list i)) 0))
-                     ;;note-not-played?)
-                (let ((os (cim_chunk_note_onset chunk i)))
-                  (play-midi-cc (if note-not-played?
-                                    (now)
-                                    (*metro* (+ last-onset os)))
-                                *midi-out*
-                                (* -1 (list-ref pitch-list i))
-                                (cim_chunk_note_volume chunk i) 0))
-                (if (>= (real->integer (list-ref pitch-list i)) 0)
-                    (begin
-                      (if note-not-played? (set! last-onset (* -1 (cim_chunk_note_onset chunk i))))
-                      (set! note-not-played? #f)
-                      (let* ((os (cim_chunk_note_onset chunk i))
-                             (mm (modulo os 0.125))
-                             (mm2 (if (< mm .05) mm
-                                      (if (> mm .1) (- mm .125)
-                                          0.0))))
-                        ;; (println 'note: (cim_chunk_note_pitch chunk i)
-                        ;;          'beats: (cim_chunk_note_beats chunk i)
-                        ;;          'dur: (cim_chunk_note_duration chunk i))
-
-                        ;; (println 'onset: os mm (- os mm2) mm2)
-
-                        ;; (play (+ 0.0 last-onset (if (< os .11) os (- os mm2))) fmsynth
-                        ;;       ;(+ 12 (list-ref pitch-list i))
-                        ;;        (pc:quantize (real->integer (+ 12 (- key ckey)
-                        ;;                                      (list-ref pitch-list i)))
-                        ;;                     scale)
-                        ;;       (* 1.0 (cim_chunk_note_volume chunk i))
-                        ;;       (* .7 (cim_chunk_note_duration chunk i)) 1.0 0.5)
+            (if note-not-played? (set! last-onset (* -1 (cim_chunk_note_onset chunk i))))
+            (set! note-not-played? #f)
+            (let* ((os (cim_chunk_note_onset chunk i))
+                   (mm (modulo os 0.125))
+                   (mm2
+                    (if (< mm .05)
+                        mm
+                        (if (> mm .1)
+                            (- mm .125)
+                            0.0))))
                         ;; CIM density count
-                        (inc-CIM-density)
-                        ;;(hplay (+ 0.0 last-onset (if (< os .11) os (- os mm2))) ;; quantise
-                        (hplay (+ last-onset os)  inst ;; no quantise
-                               (pc:quantize (real->integer (+ (- key ckey)
-                                                              (list-ref pitch-list i)))
-                                            scale)
-                               ;;(clamp (+ (* (/ (current_avg_velocity) 64) .5
-                               ;;   (+ (cim_chunk_note_volume chunk i))) (random -10 10)) 10 127)
-                               (clamp (+ (random 30) (/ (+ (current_avg_velocity)
-                                  (cim_chunk_note_volume chunk i)) 2)) 10 127)
-                               (cim_chunk_note_duration chunk i))))
-                    (begin
-                      (if (> dcontrol 2)
-                          (play-midi-cc (*metro* (+ (cim_chunk_note_onset chunk i) beat last-onset))
-                                        *midi-out* (* -1 (list-ref pitch-list i)) (cim_chunk_note_volume chunk i) 0))
-                      ))))))))
+              (inc-CIM-density)
+              ;;(hplay (+ 0.0 last-onset (if (< os .11) os (- os mm2))) ;; quantise
+              (hplay (+ last-onset os)  inst ;; no quantise
+                     (pc:quantize (real->integer (+ (- key ckey) (list-ref pitch-list i))) scale)
+                     (clamp (+ (random 30) (/ (+ (current_avg_velocity) (cim_chunk_note_volume chunk i)) 2)) 10 127)
+                     (cim_chunk_note_duration chunk i))
+              ))))))
+                    
 
-
-;; (define test)
-;;   (let ((cnt 0) (allowreset #t))
-;;     (lambda (beat dur)
-;;       (println "test:" 'beat beat 'dur: dur 'tt: (- (*metro* (+ beat (* .125 dur))) (now)) 'time: (now) 'metro: (*metro* (+ beat (* .125 dur))) 'mark: (*metro* 'get-mark))
-;;       (set! cnt (+ cnt 1))
-;;       (set! total-beat beat)
-;;       (let* ((maj? (if (< *key* 0) #f #t))
-;;              (key (if maj? *key* (modulo (* *key* -1) 12)))
-;;              (density_controller (real->integer (/ (cim_get_pedal 3) 25.0))))
-;;         (if (and (> (cim_get_pedal 4) 10) allowreset)
-;;             (begin
-;;               (println "reset pedal")
-;;               (set! allowreset #f)
-;;               (reset_buffers)))
-;;         (if (= 0 (cim_get_pedal 4))
-;;             (begin
-;;               (set! allowreset #t)))
-;;         (if (> (cim_get_pedal 5) 0)
-;;             (begin
-;;               (if *osc:on*
-;;                   (begin
-;;                     (io:osc:send (now) addy1 "/CIMdisplay/panicLED" 1)
-;;                     (io:osc:send (+ (now) 10000) addy1 "/CIMdisplay/panicLED" 0)))
-;;               (println "panic pedal")
-;;               (panic *midi-out*)))
-;;         ;; metronome
-;;         (playob 0 1 fmsynth (+ key 72) 70 (* .4 dur) 1.0 0.5)
-;;         (playob 0 1 fmsynth (+ key 84) 50 (* .1 dur) 1.0 0.5)
-;;         ;; (hplay (- 0 0.1) *midi-out* 96 40 0.1)
-;;         (if (> (cim_get_pedal 3) 0)
-;;             (if (= 0 (modulo beat (list-ref '(16 8 4 3 2 1) density_controller)))
-;;                 (begin
-;;                   (play-chunk beat *midi-out* 1.5 (list-ref '(16 8 4 3 2 1) density_controller)))))
-;;         (callback (*metro* (+ beat (* .125 dur))) 'test (+ beat dur) dur)))))
-
-;; (test (*metro* 'get-beat 4) 1)
 
 (define update-metro
   (lambda (bpm time beats)
@@ -617,16 +560,13 @@
 (define beat-loop
   (let ((cnt 0) (allowreset #t))
     (lambda (beat dur)
-      ;;(println "LED" (now))
       (set! *key* (current_key))
       (set! *pcs* (current-pcs))
       (set! *low* (current_pitch_range_low))
       (set! *high* (current_pitch_range_high))
-      (set! *density* (current_density))
+      ;(set! *density* (current_density))
       (set! *polyphony* (current_polyphony_cnt))
       (set! *bpm* (current_bpm))
-      ;;(println 'key: *key* 'bpm: *bpm*)
-      ;;(print_rhythm_bins)
       (if *osc:on*
           (begin
             (io:osc:send (*metro* beat) addy1 "/CIMdisplay/tempoLED" 1)
@@ -670,17 +610,30 @@
               (println "panic pedal")
               (panic *midi-out*)))
         ;; metronome
-        ;; (if with_dsp?
+        ;; (if with-dsp?
         ;;     (begin
         ;;       (playob 0 1 fmsynth (+ key 72) 70 (* .4 dur) 1.0 0.5)
         ;;       (playob 0 1 fmsynth (+ key 84) 50 (* .1 dur) 1.0 0.5)))
         ;; (hplay (- 0 0.1) *midi-out* 96 40 0.1)
-        (if (> (cim_get_pedal 3) 0)
-            (if (= 0 (modulo beat (cim_get_pedal 3)))
-                  (play-chunk beat *midi-out* 0.3 (cim_get_pedal 3))))
-        ;(println "beat loop")
+        ;; (if (= (modulo beat 4) 0)
+        ;;     (simple-play-note (*metro* beat) *midi-out* 36 100 0.1 9)
+        ;;     (simple-play-note (*metro* beat) *midi-out* 38 80 0.1 9))
+        (if (= 0 (modulo beat (get-repeat-period)))
+            (let ((chunk
+                   (select-chunk
+                    (* 1.5 (get-repeat-period))
+                    (get-forbidden-range-min)
+                    (get-forbidden-range-max))))
+              ;;(println "Forbidden range is " (get-forbidden-range-min) " to " (get-forbidden-range-max))
+              (set-forbidden-range-min 0)
+              (set-forbidden-range-max 0)
+              (if (= (cim_chunk_valid chunk) 1)
+                  (play-chunk chunk beat *midi-out*))))
         (beat-update-CIM-density)
-      (callback (*metro* (+ beat (* 0.95 dur))) 'beat-loop (+ beat dur) dur))))
+        (callback (*metro* (+ beat (* 0.95 dur))) 'beat-loop (+ beat dur) dur))))
+
+
+(cim_pcs->list (get_pitch_class_set))
 
 ;; start main playback loop
 (beat-loop (*metro* 'get-beat 1) 1)
@@ -732,24 +685,45 @@
 
 ;; vary playback frequency based on perfromer density
 ;; (cim_get_pedal 3 chunk play interval in beats
-(define CIM-playback-frequency 0)
+;;(define CIM-playback-frequency 0)
+
 
 (define density-loop
   (lambda (beat dur)
     (let ((den (current_density))
           (cimDen (get-CIM-density)))
-      (cond  ((>= den 0)
-              (if (and (= den 0) (< (random) 0.2))
-                (set! CIM-playback-frequency 0) ;;;
-                (set! CIM-playback-frequency 4))
-              (cond ((and (> cimDen 0) (< cimDen 20))
-                      (set! CIM-playback-frequency (max 1 (- CIM-playback-frequency 1))))
-                    ((and (> cimDen 30) (< cimDen 50))
-                      (set! CIM-playback-frequency (min 16 (+ CIM-playback-frequency 1))))
-                    ((> cimDen 50) (set! CIM-playback-frequency 0)))))
-      (cim_set_pedal 3 CIM-playback-frequency)
-      (println 'density (now) 'CIM (get-CIM-density) 'Hum den 'rate (cim_get_pedal 3)))
-    (callback (*metro* (+ beat (* 0.95 dur))) 'density-loop (+ beat dur) dur)))
+      (if (< den 0.5)
+          (if (< (random) 0.1)
+              (set-repeat-period (max 1 (- (get-repeat-period) 1)))
+              (set-repeat-period (min 16 (max 1 (+ (get-repeat-period) (random -2 3))))))
+          (if (< (random) 0.25)
+              (set-repeat-period (min 16 (+ (get-repeat-period) 1)))
+              (set-repeat-period (max 1 (min 16 (+ (get-repeat-period) (random -2 3)))))))
+          (println 'density 'CIM (get-CIM-density) 'Hum den 'rate (get-repeat-period))
+          (callback (*metro* (+ beat (* 0.95 dur))) 'density-loop (+ beat dur) dur))))
+          
+
+(set-repeat-period 4)
+
+
+
+;; (define density-loop
+;;   (lambda (beat dur)
+;;     (let ((den (current_density))
+;;           (cimDen (get-CIM-density)))
+;;       (cond  ((>= den 0)
+;;               (if (and (= den 0) (< (random) 0.2))  ;; human player is silent
+;;                 (set! *cim-current-repeat-period* 4/1) ;;;
+;;                 (set! *cim-current-repeat-period* 2/1))
+;;               (cond
+;;                ((and (> cimDen 0) (< cimDen 20))
+;;                 (set! CIM-playback-frequency (max 1 (- CIM-playback-frequency 1))))
+;;                     ((and (> cimDen 30) (< cimDen 50))
+;;                       (set! CIM-playback-frequency (min 16 (+ CIM-playback-frequency 1))))
+;;                     ((> cimDen 50) (set! CIM-playback-frequency 0)))))
+;;       (cim_set_pedal 3 CIM-playback-frequency)
+;;       (println 'density 'CIM (get-CIM-density) 'Hum den 'rate (cim_get_pedal 3)))
+;;     (callback (*metro* (+ beat (* 0.95 dur))) 'density-loop (+ beat dur) dur)))
 
 ;(random '(120 120 100 100 80 70 40 20)))))
 
@@ -784,28 +758,8 @@
 ;; start sections off with initial call
 (next_cim_section)
 
-;; Gaussian random
-(bind-func randnd
-  (let ((phase 0))
-    (lambda ()
-      (let ((u1:double (random))
-            (u2:double (random))
-            (v1 (- (* 2.0 u1) 1.0))
-            (v2 (- (* 2.0 u2) 1.0))
-            (s (+ (* v1 v1) (* v2 v2))))
-        (if (= phase 0)
-            (if (or (> s 1.0) (= s 0.0) (= s 1.0))
-                (randnd)
-                (* v1 (sqrt (/ (* -2.0 (log s)) s))))
-            (begin (set! phase (- 1 phase))
-                   (* v2 (sqrt (/ (* -2.0 (log s)) s)))))))))
-
-
-(bind-func binomial_rng:[double]*
-  (lambda ()
-    (/ (+ (random) (random)) 2.0)))
-
 ;(randnd)
 ;(setCIMDefaultGapSize 1.0)
 ;; flush memory
 (reset_buffers)
+
