@@ -178,8 +178,8 @@
 
 ;;(panic)
 
-;;(pm_send *midi-out* 144 0 61 100)
-;;(pm_send *midi-out* 128 0 61 0)
+($ (pm_send midi_out 144 0 61 100))
+($ (pm_send midi_out 128 0 61 0))
 
 ;; sustain
 (pm_send *midi-out* *midi-cc* 0 64 0)
@@ -510,6 +510,7 @@
 
 (define play-chunk
   (lambda (chunk beat inst)
+    ;(println "play chunk")
     (let* ((chunkkey (cim_chunk_key chunk))
            (cmaj? (if (= 1 (cim_key_major chunkkey)) #t #f))
            (ckey (cim_key_root chunkkey))
@@ -550,8 +551,7 @@
                        (clamp (+ (random -10 10) (/ (+ (current_avg_velocity) (cim_chunk_note_volume chunk i)) 2)) 10 127)
                        (cim_chunk_note_duration chunk i))
                 )))))))
-                    
-
+                   
 
 (define update-metro
   (lambda (bpm time beats)
@@ -569,6 +569,7 @@
 (define beat-loop
   (let ((cnt 0) (allowreset #t))
     (lambda (beat dur)
+      ;;(println "beat loop")
       (set! *key* (current_key))
       (set! *pcs* (current-pcs))
       (set! *low* (current_pitch_range_low))
@@ -709,7 +710,7 @@
               (set-repeat-period (max 1 (min 16 (+ (get-repeat-period) (random -2 3)))))))
           (println 'density 'CIM (get-CIM-density) 'Hum den 'rate (get-repeat-period))
           (callback (*metro* (+ beat (* 0.95 dur))) 'density-loop (+ beat dur) dur))))
-          
+
 
 (set-repeat-period 1)
 
@@ -775,4 +776,3 @@
 
 ;; flush memory
 (reset_buffers)
-
