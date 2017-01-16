@@ -358,6 +358,13 @@
 (define *cim-phrase-overlap-factor* 1.5)
 ;(define *cim-current-repeat-period* 1)
 
+(define set-tempo
+  (lambda (bpm)
+    (set_bpm bpm)
+    (set! *bpm* bpm)
+    (*metro* 'set-tempo bpm)))
+
+
 ;; pitch transformations
 (define pitch-list '(60)) ;; start with dummy data
 
@@ -519,26 +526,28 @@
             (io:osc:send (*metro* beat) addy1 "/CIMdisplay/tempoPBS" 1)
             (io:osc:send (+ 5000 (*metro* beat)) addy1 "/CIMdisplay/tempoPBS" 0)))
       (transform-pitches (get-pitches-from-chunk chunk) chunkkey)
-      (if (= (cim_chunk_valid chunk) 1)
-          (dotimes (i size)
-            (if note-not-played? (set! last-onset (* -1 (cim_chunk_note_onset chunk i))))
-            (set! note-not-played? #f)
-            (let* ((os (cim_chunk_note_onset chunk i))
-                   (mm (modulo os 0.125))
-                   (mm2
-                    (if (< mm .05)
-                        mm
-                        (if (> mm .1)
-                            (- mm .125)
-                            0.0))))
-                        ;; CIM density count
-              (inc-CIM-density)
-              ;;(hplay (+ 0.0 last-onset (if (< os .11) os (- os mm2))) ;; quantise
-              (hplay (+ last-onset os)  inst ;; no quantise
-                     (pc:quantize (real->integer (+ (- key ckey) (list-ref pitch-list i))) scale)
-                     (clamp (+ (random 20) (/ (+ (current_avg_velocity) (cim_chunk_note_volume chunk i)) 2)) 10 127)
-                     (cim_chunk_note_duration chunk i))
-              ))))))
+      (let ((offset (cim_chunk_start_beatclass chunk)))
+        (println 'Offset offset)
+        (if (= (cim_chunk_valid chunk) 1)
+            (dotimes (i size)
+              (if note-not-played? (set! last-onset (* -1 (cim_chunk_note_onset chunk i))))
+              (set! note-not-played? #f)
+              (let* ((os (cim_chunk_note_onset chunk i))
+                     (mm (modulo os 0.125))
+                     (mm2
+                      (if (< mm .05)
+                          mm
+                          (if (> mm .1)
+                              (- mm .125)
+                              0.0))))
+                ;; CIM density count
+                (inc-CIM-density)
+                ;;(hplay (+ 0.0 last-onset (if (< os .11) os (- os mm2))) ;; quantise
+                (hplay (+ offset last-onset os)  inst ;; no quantise
+                       (pc:quantize (real->integer (+ (- key ckey) (list-ref pitch-list i))) scale)
+                       (clamp (+ (random -10 10) (/ (+ (current_avg_velocity) (cim_chunk_note_volume chunk i)) 2)) 10 127)
+                       (cim_chunk_note_duration chunk i))
+                )))))))
                     
 
 
@@ -758,8 +767,11 @@
 
 (set-phrase-inertia-spread 0.5)
 
-;(randnd)
 (setCIMDefaultGapSize 1.0)
+
+(set-tempo 120)
+
+
 ;; flush memory
 (reset_buffers)
 
