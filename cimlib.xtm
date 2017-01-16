@@ -1188,7 +1188,7 @@
   (lambda (val:double)
     CIMDefaultGapSize))
 
-;(setCIMDefaultGapSize 2.0)
+(setCIMDefaultGapSize 1.0)
 
 ;; (bind-func cim_note_closure
 ;;   (lambda (a:CIMNote* b:CIMNote* c:CIMNote*)
@@ -3114,7 +3114,7 @@
 ;;
 
 (bind-val CIM_LOAD_TIME double 0.0)
-(bind-val CIM_PRINT_MIDI_MESSAGES i1 0)
+(bind-val CIM_PRINT_MIDI_MESSAGES i1 1)
 
 (bind-func cim_print_midi_messages
   (lambda (x)
