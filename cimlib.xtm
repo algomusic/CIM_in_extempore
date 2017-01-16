@@ -150,6 +150,7 @@
            0.0 1.0)))
 
 
+
 ;;;;;;;;;;;;;; LinkTimelineEntry data type ;;;;;;;;;;;;;;;;;;;;;
 ;; An Ableton Link style 'Timeline' entry, i.e. a single identification of a beat with a time, and a tempo to hold sway until the next entry
 ;; note that time is measured in seconds, and tempo in beats per second
@@ -247,8 +248,6 @@
         (* -1.0 x) quantum)
        -1)))))
 
-
-
 (bind-func beat:[Rational,LinkTimeline*,double,i64]*
   (lambda (timeline inTime startIndex)
     (let ((loop:[i64,i64]*
@@ -281,10 +280,12 @@
 (bind-val cim_global_tempo_map LinkTimeline* (LinkTimeline null 0))
 
 
-
-
-
-
+(bind-func set_bpm
+  (lambda (value:double)
+    (set! CIM_GLOBAL_BPM value)
+    (set! cim_global_tempo_map (LinkTimeline (LinkTimelineEntry (Rat 0 1) 0.0 (/ CIM_GLOBAL_BPM 60.0)) 1))
+    value))
+    
 
 ;;;;;;;;;;;;;;;;  Pitch analysis functions such as range avoidance ;;;;;;;;;;;;;;;
 (bind-val pitch_history_len i64 16)
@@ -499,10 +500,27 @@
 (bind-val CIMHighClosureIndicesCount i64)
 (bind-val CIMGlobalClosureThreshold double 0.5)
 
+(bind-val CIMGlobalGoodStartNotes |1000000,i64|)
+(bind-val CIMGlobalGoodStartNotesCount i64)
+
+(bind-val CIMGlobalGoodEndNotes |1000000,i64|)
+(bind-val CIMGlobalGoodEndNotesCount i64)
+
+
 (bind-val CIMGlobalLastChunkCandidateIndex i64 0)
 (bind-val CIMGlobalChunkRepeatPeriod i64 1)
 (bind-val CIMGlobalForbiddenRangeMin i64 0)
 (bind-val CIMGlobalForbiddenRangeMax  i64 0)
+
+(bind-val CIMGlobalPhraseInertiaSpread double 0.5)
+
+(bind-func get-phrase-inertia-spread:[double]*
+  (lambda ()
+    (CIMGlobalPhraseInertiaSpread)))
+
+(bind-func set-phrase-inertia-spread:[double,double]*
+  (lambda (value)
+    (set! CIMGlobalPhraseInertiaSpread value)))
 
 (bind-func get-forbidden-range-min:[i64]*
   (lambda ()
@@ -531,9 +549,22 @@
     (set! CIMGlobalChunkRepeatPeriod value)))
 
 
+(bind-func cim_clear_good_start_notes
+  (lambda ()
+    (set! CIMGlobalGoodStartNotesCount 0)
+    void))
+
+(bind-func cim_clear_good_end_notes
+  (lambda ()
+    (set! CIMGlobalGoodEndNotesCount 0)
+    void))
+
+
 (bind-func cim_clear_high_closure_candidates
   (lambda ()
     (set! CIMHighClosureIndicesCount 0)
+    (cim_clear_good_start_notes)
+    (cim_clear_good_end_notes)
     void))
 
 
@@ -591,6 +622,92 @@
           (set! CIMHighClosureIndicesCount (- CIMHighClosureIndicesCount 1))))
        (else
         -1)))))
+
+
+;;; start note locate
+(bind-func cim_find_good_start_note:[i64,i64]*
+  (lambda (candidate:i64)
+    (let ((loop
+           (lambda (cc:i64)
+             (if (<= CIMGlobalGoodStartNotesCount cc)
+                 -1
+                 (if (= (aref CIMGlobalGoodStartNotes cc)  candidate)
+                     cc
+                     (loop (+ cc 1)))))))
+      (loop 0))))
+
+
+(bind-func cim_add_good_start_note:[i64,i64]*
+  (lambda (good_index)
+    (cond
+     ((< (cim_find_good_start_note good_index) 0)
+      (aset! CIMGlobalGoodStartNotes CIMGlobalGoodStartNotesCount good_index)
+      (set! CIMGlobalGoodStartNotesCount (+ CIMGlobalGoodStartNotesCount 1))
+      1)
+     (else -1))
+    -1))
+        
+
+(bind-func cim_remove_good_start_note:[i64,i64]*
+  (lambda (candidate:i64)
+    (let ((n:i64 (cim_find_good_start_note candidate)))
+      (cond
+       ((<= 0 n)
+        (let ((loop:[i64,i64]*
+               (lambda (i:i64)
+                 (cond
+                  ((< i (- CIMGlobalGoodStartNotesCount 1))
+                   (aset! CIMGlobalGoodStartNotes i (aref CIMGlobalGoodStartNotes (+ i 1)))
+                   (loop (+ i 1)))
+                  (else 1)))))
+          (loop n)
+          (set! CIMGlobalGoodStartNotesCount (- CIMGlobalGoodStartNotesCount 1))))
+       (else
+        -1)))))
+
+
+
+;;;
+(bind-func cim_find_good_end_note:[i64,i64]*
+  (lambda (candidate:i64)
+    (let ((loop
+           (lambda (cc:i64)
+             (if (<= CIMGlobalGoodEndNotesCount cc)
+                 -1
+                 (if (= (aref CIMGlobalGoodEndNotes cc)  candidate)
+                     cc
+                     (loop (+ cc 1)))))))
+      (loop 0))))
+
+
+(bind-func cim_add_good_end_note:[i64,i64]*
+  (lambda (good_index)
+    (cond
+     ((< (cim_find_good_end_note good_index) 0)
+      (aset! CIMGlobalGoodEndNotes CIMGlobalGoodEndNotesCount good_index)
+      (set! CIMGlobalGoodEndNotesCount (+ CIMGlobalGoodEndNotesCount 1))
+      1)
+     (else -1))
+    -1))
+        
+
+(bind-func cim_remove_good_end_note:[i64,i64]*
+  (lambda (candidate:i64)
+    (let ((n:i64 (cim_find_good_end_note candidate)))
+      (cond
+       ((<= 0 n)
+        (let ((loop:[i64,i64]*
+               (lambda (i:i64)
+                 (cond
+                  ((< i (- CIMGlobalGoodEndNotesCount 1))
+                   (aset! CIMGlobalGoodEndNotes i (aref CIMGlobalGoodEndNotes (+ i 1)))
+                   (loop (+ i 1)))
+                  (else 1)))))
+          (loop n)
+          (set! CIMGlobalGoodEndNotesCount (- CIMGlobalGoodEndNotesCount 1))))
+       (else
+        -1)))))
+
 
 
 (bind-func random_index:[i64,i64]*
@@ -698,6 +815,10 @@
   (lambda (note:CIMNote* duration)
     (tset! note 2 duration)))
 
+(bind-func cim_note_offset
+  (lambda (note:CIMNote*)
+    (+ (cim_note_onset note) (cim_note_duration note))))
+
 (bind-func cim_note_pitch
   (lambda (note:CIMNote*)
     (tref note 3)))
@@ -768,7 +889,8 @@
     (cim_clear_high_closure_candidates)
     (set-forbidden-range-min 0)
     (set-forbidden-range-max 0)
-    (set! CIMNoteBufferIdx 0)))
+    (set! CIMNoteBufferIdx 0)
+    (set_cim_start_time 0)))
 
 (bind-func dump_note_buffer
   (lambda ()
@@ -1019,6 +1141,15 @@
       a)))
 
 
+(bind-func cim_chunk_start_beatclass
+  (lambda (chunk)
+    (let* ((note:CIMNote* (cim_chunk_start chunk))
+           (onset:double (cim_note_onset note)))
+      (modulo onset 1.0))))
+           
+          
+
+
 (bind-func print:[void,CIMChunk*]*
   (lambda (chunk)
     (if (null? chunk)
@@ -1229,6 +1360,50 @@
         (cim_note_closure_normal n x s))))))
 
 
+(bind-func is_good_start_note:[bool,CIMNote*,CIMNote*,CIMNote*,double]*
+  (lambda (n:CIMNote* x:CIMNote* s:CIMNote* currentTime:double)
+    (cond
+     ((null? x) #f)
+     ((and (null? n) (null? s)) #f)
+     ((null? n) #t)
+     ((null? s) #f)
+     ((= (cim_note_duration x) 0.0) #f)
+     ((< CIMDefaultGapSize (- (cim_note_onset s) (cim_note_offset x))) #f)
+     (else #t))))
+
+
+(bind-func is_good_start_note:[bool,i64]*
+  (lambda (index)
+    (let ((note_n:CIMNote* (retrieve_note (- index 1)))
+          (note_x:CIMNote* (retrieve_note index))
+          (note_s:CIMNote* (retrieve_note (+ index 1)))
+          (currentTime:double (cim_current_time)))
+      (is_good_start_note:[bool,CIMNote*,CIMNote*,CIMNote*,double]* note_n note_x note_s currentTime))))
+
+
+(bind-func is_good_end_note:[bool,CIMNote*,CIMNote*,CIMNote*,double]*
+  (lambda (n:CIMNote* x:CIMNote* s:CIMNote* currentTime:double)
+    (cond
+     ((null? x) #f)
+     ((and (null? n) (null? s)) #f)
+     ((null? n) #f)
+     ((null? s) #t)
+     ((= (cim_note_duration x) 0.0) #f)
+     ((< CIMDefaultGapSize (- (cim_note_onset s) (cim_note_offset x))) #t)
+     (else #f))))
+
+
+(bind-func is_good_end_note:[bool,i64]*
+  (lambda (index)
+    (let ((note_n:CIMNote* (retrieve_note (- index 1)))
+          (note_x:CIMNote* (retrieve_note index))
+          (note_s:CIMNote* (retrieve_note (+ index 1)))
+          (currentTime:double (cim_current_time)))
+      (is_good_end_note:[bool,CIMNote*,CIMNote*,CIMNote*,double]* note_n note_x note_s currentTime))))
+
+
+
+
 (bind-func update_closures:[i64,i64,double]*
   (lambda (index:i64 currentTime:double)
     (let ((note_n (retrieve_note (- index 1)))
@@ -1239,9 +1414,16 @@
         (let ((c:double (cim_note_closure note_n note_x note_s currentTime)))
           (aset! CIMNoteGlobalClosureBuffer index
                  (cim_note_closure note_n note_x note_s currentTime))
-          (if (<= CIMGlobalClosureThreshold c)
-              (cim_add_high_closure_candidate:[i64,i64]* index)
-              (cim_remove_high_closure_candidate:[i64,i64]* index)))
+          (cond
+           ((<= CIMGlobalClosureThreshold c)
+            (cim_add_high_closure_candidate index)
+            (if (is_good_start_note note_n note_x note_s currentTime) (cim_add_good_start_note index))
+            (if (is_good_end_note note_n note_x note_s currentTime) (cim_add_good_end_note index)))
+            (else
+             (cim_remove_high_closure_candidate index)
+             (cim_remove_good_start_note index)
+             (cim_remove_good_end_note index)
+             )))
         (update_closures (+ index 1) currentTime))
        (else index)))))
 
@@ -1306,10 +1488,10 @@
       (tset! chunk 0 #f)
       (cond
        ((< 0 CIMNoteBufferIdx)
-        (set! CIMGlobalLastChunkCandidateIndex (max 0 (min (+ CIMGlobalLastChunkCandidateIndex (dtoi64 (round (* 1.0 (randnd))))) (- CIMHighClosureIndicesCount 1))))
+        (set! CIMGlobalLastChunkCandidateIndex (max 0 (min (+ CIMGlobalLastChunkCandidateIndex (dtoi64 (round (* CIMGlobalPhraseInertiaSpread (randnd))))) (- CIMGlobalGoodStartNotesCount 1))))
         (let ((startIndex:i64
-               (if (and (< 0 CIMGlobalLastChunkCandidateIndex) (< CIMGlobalLastChunkCandidateIndex CIMHighClosureIndicesCount))
-                   (min (+ (aref CIMHighClosureIndices CIMGlobalLastChunkCandidateIndex) 1) CIMNoteBufferIdx)
+               (if (and (< 0 CIMGlobalLastChunkCandidateIndex) (< CIMGlobalLastChunkCandidateIndex CIMGlobalGoodStartNotesCount))
+                   (min (+ (aref CIMGlobalGoodStartNotes CIMGlobalLastChunkCandidateIndex) 0) CIMNoteBufferIdx)
                    (random_index CIMNoteBufferIdx)))
               (startNote:CIMNote* (retrieve_note startIndex))
               (startOnset:double (cim_note_onset startNote))
@@ -1873,9 +2055,6 @@
 
 
 
-
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; MIDI MESSAGE BUFFER
@@ -2167,58 +2346,64 @@
           (aset! rhythmbins i (- (aref rhythmbins i) 1))))
     void))
 
+;; (bind-func current_bpm
+;;   (let ((useweighting #f)
+;;         (firstm 0) (firsti 0) (secondm 0) (secondi 0) (i 0) (idx 0)
+;;         (weight 0.0) (bpm 0.0) (firstbpm 0.0) (secondbpm 0.0)
+;;         (cur_bpm 120.0))
+;;     (lambda ()
+;;       (set! firstm 0) (set! firsti 0) (set! secondm 0) (set! secondi i) (set! idx 0)
+;;       (dotimes (i NumRhythmBins)
+;;         ;;(println "bin" i (aref rhythmbins i))
+;;         (if (> (aref rhythmbins i) firstm)
+;;             (begin
+;;               ;;(println "first" i NumRhythmBins firstm)
+;;               (set! secondi firsti)
+;;               (set! secondm firstm)
+;;               (set! firstm (aref rhythmbins i))
+;;               (set! firsti i)
+;;               (set! idx i))
+;;             (if (> (aref rhythmbins i) secondm)
+;;               (begin (set! secondi i)
+;;                      (set! secondm (aref rhythmbins i))))))
+;;       ;(printout "first: [" firsti "," firstm "] second: [" secondi "," secondm "]\n")
+;;       (set! firstbpm (+ bpm_low (* (i64tod firsti) bpm_mod)))
+;;       (set! secondbpm (+ bpm_low (* (i64tod secondi) bpm_mod)))
+;;       (set! weight (if (= 0 firstm) 1.0 (/ (i64tod secondm) (i64tod firstm))))
+;;       ;; use weight
+;;       (if useweighting
+;;           (set! bpm (+ firstbpm (* weight (- secondbpm firstbpm))))
+;;           (set! bpm firstbpm))
+;;       ;(printout "bpm:" bpm " bpm1:" firstbpm " bpm2:" secondbpm " "
+;;       ;          (* weight (- secondbpm firstbpm)) " weight:" weight "\n")
+;;       (if (> firstm 7)
+;;           (begin
+;;             (dotimes (i NumRhythmBins)
+;;               (aset! rhythmbins i 0))
+;;             (aset! rhythmbins idx 3)))
+;;       (if (and (> (fabs (- cur_bpm bpm)) 2.0)
+;;                (> firstm 1))
+;;           (begin
+;;             (set! CIM_GLOBAL_BPM_CONFIDENCE 0)
+;;             ;;(println "changing bpm: " current_bpm " to " bpm)
+;;             (set! cur_bpm bpm)
+;;             void)
+;;           (begin
+;;             (set! CIM_GLOBAL_BPM_CONFIDENCE (+ 1 CIM_GLOBAL_BPM_CONFIDENCE))
+;;             void))
+;;       (if (and (>= CIM_GLOBAL_BPM_CONFIDENCE CIM_GLOBAL_BPM_CONFIDENCE_WEIGHT)
+;;                (> (cim_get_pedal 1) 30))
+;;           (begin
+;;             ;;(println "updating global metro " CIM_GLOBAL_BPM " ... ")
+;;             (set! CIM_GLOBAL_BPM cur_bpm)))
+;;       ;(print_rhythm_bins)
+;;       (dtoi64 CIM_GLOBAL_BPM))))
+
+
 (bind-func current_bpm
-  (let ((useweighting #f)
-        (firstm 0) (firsti 0) (secondm 0) (secondi 0) (i 0) (idx 0)
-        (weight 0.0) (bpm 0.0) (firstbpm 0.0) (secondbpm 0.0)
-        (cur_bpm 120.0))
-    (lambda ()
-      (set! firstm 0) (set! firsti 0) (set! secondm 0) (set! secondi i) (set! idx 0)
-      (dotimes (i NumRhythmBins)
-        ;;(println "bin" i (aref rhythmbins i))
-        (if (> (aref rhythmbins i) firstm)
-            (begin
-              ;;(println "first" i NumRhythmBins firstm)
-              (set! secondi firsti)
-              (set! secondm firstm)
-              (set! firstm (aref rhythmbins i))
-              (set! firsti i)
-              (set! idx i))
-            (if (> (aref rhythmbins i) secondm)
-              (begin (set! secondi i)
-                     (set! secondm (aref rhythmbins i))))))
-      ;(printout "first: [" firsti "," firstm "] second: [" secondi "," secondm "]\n")
-      (set! firstbpm (+ bpm_low (* (i64tod firsti) bpm_mod)))
-      (set! secondbpm (+ bpm_low (* (i64tod secondi) bpm_mod)))
-      (set! weight (if (= 0 firstm) 1.0 (/ (i64tod secondm) (i64tod firstm))))
-      ;; use weight
-      (if useweighting
-          (set! bpm (+ firstbpm (* weight (- secondbpm firstbpm))))
-          (set! bpm firstbpm))
-      ;(printout "bpm:" bpm " bpm1:" firstbpm " bpm2:" secondbpm " "
-      ;          (* weight (- secondbpm firstbpm)) " weight:" weight "\n")
-      (if (> firstm 7)
-          (begin
-            (dotimes (i NumRhythmBins)
-              (aset! rhythmbins i 0))
-            (aset! rhythmbins idx 3)))
-      (if (and (> (fabs (- cur_bpm bpm)) 2.0)
-               (> firstm 1))
-          (begin
-            (set! CIM_GLOBAL_BPM_CONFIDENCE 0)
-            ;;(println "changing bpm: " current_bpm " to " bpm)
-            (set! cur_bpm bpm)
-            void)
-          (begin
-            (set! CIM_GLOBAL_BPM_CONFIDENCE (+ 1 CIM_GLOBAL_BPM_CONFIDENCE))
-            void))
-      (if (and (>= CIM_GLOBAL_BPM_CONFIDENCE CIM_GLOBAL_BPM_CONFIDENCE_WEIGHT)
-               (> (cim_get_pedal 1) 30))
-          (begin
-            ;;(println "updating global metro " CIM_GLOBAL_BPM " ... ")
-            (set! CIM_GLOBAL_BPM cur_bpm)))
-      ;(print_rhythm_bins)
-      (dtoi64 CIM_GLOBAL_BPM))))
+  (lambda ()
+    (dtoi64 CIM_GLOBAL_BPM)))
+
 
 (bind-func bpm_analysis
   (let ((previous_onset 0.0)
@@ -2987,15 +3172,8 @@
                        ;;     void))
                   (pm_send midi_out type chan a b)
                   void)
-                 ((= a 66) ;; middle piano pedal
-                  (if (= (cim_get_pedal 1) 0)
-                      (begin
-                        (println "Release Bins" (cim_get_pedal 1) (dtoi64 (/ (- CIM_GLOBAL_BPM bpm_low) bpm_mod)))
-                        (release_bpm_bins)
-                        (set! CIM_GLOBAL_BPM_CONFIDENCE 0)
-                        ;;(aset! rhythmbins (dtoi64 (/ (- CIM_GLOBAL_BPM bpm_low) bpm_mod)) 2)
-                        ))
-                  (cim_set_pedal 1 (convert b)) ;; analyse
+                 ((= a 66:i32) ;; middle piano pedal
+                  (pm_send midi_out type chan a b)
                   void)
                  ((= a 67) ;; left piano pedal
                   (println "Left Pedal: " b)
@@ -3073,6 +3251,32 @@
   (lambda (type:i32 a:i32 b:i32 chan:i32)
     ;; (println "MIDIMSG: " type a b chan)
     void))
+
+
+(bind-func midi_note_on
+  (lambda (pitch:i32 volume:i32 chan:i32)
+    ;;(println "NOTE_ON :" pitch volume chan)
+    (midi_msg_buffer_receiver (clock_clock) MIDI_NOTE_ON chan pitch volume)
+    void))
+
+(bind-func midi_note_off
+  (lambda (pitch:i32 volume:i32 chan:i32)
+    ;; (println "NOTE_OFF:" pitch volume chan)
+    (midi_msg_buffer_receiver (clock_clock) MIDI_NOTE_OFF chan pitch 0)
+    void))
+
+(bind-func midi_cc
+  (lambda (controller:i32 value:i32 chan:i32)
+    ;; (println "MIDI_CC :" controller value chan)
+    (midi_msg_buffer_receiver (clock_clock) MIDI_CC chan controller value)
+    void))
+
+;; by default don't print non note/cc MIDI messages
+(bind-func midi_msg
+  (lambda (type:i32 a:i32 b:i32 chan:i32)
+    ;; (println "MIDIMSG: " type a b chan)
+    void))
+
 
 (impc:aot:insert-footer "xtmcimlib")
 (define *xtmlib-cimlib-loaded* #t)
