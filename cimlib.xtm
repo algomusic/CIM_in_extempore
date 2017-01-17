@@ -20,8 +20,8 @@
 (define *xtmlib-cimlib-loaded* #f)
 
 ;; (impc:aot:suppress-aot-do
-;;  (sys:load "libs/external/portmidi.xtm"))
-;; (impc:aot:insert-forms (sys:load "libs/external/portmidi.xtm"))
+;;  (sys:load "libs/external/midi_input.xtm"))
+;; (impc:aot:insert-forms (sys:load "libs/external/midi_input.xtm"))
 
 ;; (impc:aot:suppress-aot-do
 ;;  (sys:load "libs/core/math.xtm"))
@@ -319,6 +319,13 @@
 	(lambda (val:i64)
 		(aset! pitch_history pitch_history_index val)
 		(set! pitch_history_index (modulo (+ pitch_history_index 1) pitch_history_len))))
+
+(bind-func clear_pitch_history
+  (lambda ()
+    (let ((i:i64 0))
+      (dotimes (i pitch_history_len)
+        (aset! pitch_history i 0)))
+    void))
 
 (bind-val pitch_class_set_len i64 12)
 (bind-val pitch_class_set CIMi64Array* (cim_i64_create pitch_class_set_len))
@@ -889,6 +896,7 @@
 (bind-func note_buffer_reset
   (lambda ()
     ;;(memset (cast CIMNoteBuffer) 0 (* 1000000 40))
+    (clear_pitch_history)
     (set! CIMGlobalChunkRepeatPeriod 1)
     (set! CIMGlobalLastChunkCandidateIndex 0)
     (cim_clear_high_closure_candidates)
@@ -3164,7 +3172,7 @@
                           (if (> (cim_get_pedal 1) 30) (analysis t note))
                           (if (not (null? note))
                             (velocity_analysis t (dtoi64 ( 2.0 CIMSRd)) note)))
-                       (else (println "Error: record_note function returned -1")))
+                         (else (println "Error: record_note function returned -1")))
                        ))))
             (if (= type MIDI_CC)
                 (cond
@@ -3181,7 +3189,7 @@
                   (pm_send midi_out type chan a b)
                   void)
                  ((= a 67) ;; left piano pedal
-                  (println "Left Pedal: " b)
+                  ;(println "Left Pedal: " b)
                   (cond
                    (flush_pedal_down
                     (cond
