@@ -580,6 +580,11 @@
     void))
 
 
+(bind-func note_buffer_length:[i64]*
+  (lambda ()
+    CIMNoteBufferIdx))
+
+
 ;; Checks whether a particular note index is currently listed as a high closure candidate (return true or false)
 ;; (bind-func cim_check_high_closure_candidate:[bool,i64]*
 ;;   (lambda (candidate:i64)
@@ -897,7 +902,7 @@
   (lambda ()
     ;;(memset (cast CIMNoteBuffer) 0 (* 1000000 40))
     (clear_pitch_history)
-    (set! CIMGlobalChunkRepeatPeriod 1)
+    (set! CIMGlobalChunkRepeatPeriod 2)
     (set! CIMGlobalLastChunkCandidateIndex 0)
     (cim_clear_high_closure_candidates)
     (set-forbidden-range-min 0)
@@ -1524,22 +1529,27 @@
                        (loop (+ index 1) (+ cc 1)))
                       (else index))))
                   (else index)))))
-          (loop startIndex 0)
-          ;;(println "Selected candidate " CIMGlobalLastChunkCandidateIndex " which is note index " startIndex " with endIndex " maxIndex)
-          (let* ((endIndex maxIndex)
-                 (endNote (retrieve_note endIndex))
-                 (endOnset (cim_note_onset endNote))
-                 (end_dur (cim_note_duration endNote))
-                 (chunk_dur (- (+ endOnset end_dur) startOnset)))
-            (tfill! chunk #t startNote endNote (+ 1 (- endIndex startIndex)) startOnset chunk_dur CIM_GLOBAL_BPM 0.0)
-            (set_chunk_homophonic_percentage chunk)
-            (let ((min_pitch (cim_chunk_min_pitch chunk))
-                  (max_pitch (cim_chunk_max_pitch chunk)))
-              (if (or (< max_pitch minForbiddenPitch) (> min_pitch maxForbiddenPitch) (> attempt 5))
-                  chunk
-                  (new_find_chunk max_length_in_beats minForbiddenPitch maxForbiddenPitch (+ attempt 1)))))))
+          (cond
+           ((and (<= 0 startIndex) (< startIndex CIMNoteBufferIdx))
+            (loop startIndex 0)
+               ;;(println "Selected candidate " CIMGlobalLastChunkCandidateIndex " which is note index " startIndex " with endIndex " maxIndex)
+            (let* ((endIndex maxIndex)
+                   (endNote (retrieve_note endIndex))
+                   (endOnset (cim_note_onset endNote))
+                   (end_dur (cim_note_duration endNote))
+                   (chunk_dur (- (+ endOnset end_dur) startOnset)))
+              (tfill! chunk #t startNote endNote (+ 1 (- endIndex startIndex)) startOnset chunk_dur CIM_GLOBAL_BPM 0.0)
+              (set_chunk_homophonic_percentage chunk)
+              (let ((min_pitch (cim_chunk_min_pitch chunk))
+                    (max_pitch (cim_chunk_max_pitch chunk)))
+                (if (or (< max_pitch minForbiddenPitch) (> min_pitch maxForbiddenPitch) (> attempt 5))
+                    chunk
+                    (new_find_chunk max_length_in_beats minForbiddenPitch maxForbiddenPitch (+ attempt 1))))))
+           (else
+            ;;(println "---- The note database is currently empty, so no valid chunk could be found")
+            (tset! chunk 0 #f)
+            chunk))))
        (else
-        ;;(println "---- The note database is currently empty, so no valid chunk could be found")
         (tset! chunk 0 #f)
         chunk)))))
  
@@ -3140,7 +3150,8 @@
   (let ((idx -1)
         (note:CIMNote* null)
         (time_of_first_message 0.0:double)
-        (flush_pedal_down:i1 #f))
+        (flush_pedal_down:i1 #f)
+        (ignore_mode_on:i1 #f))
     (lambda (time:double type:i32 chan:i32 a:i32 b:i32)
       ;;(println "Flush pedal is " flush_pedal_down)
       ;;(println "MIDI message" type chan a b)
@@ -3160,7 +3171,7 @@
                     (= type MIDI_NOTE_OFF))
                 (begin
                   (density_analysis t (dtoi64 (* 2.0 CIMSRd)))
-                  (if (not flush_pedal_down)
+                  (if (and (not flush_pedal_down) (not ignore_mode_on))
                       (begin
                         (set! idx (record_note t type (i32toi8 chan) (i32toi8 a) (i32toi8 b)))
                         (cond
@@ -3172,7 +3183,7 @@
                           (if (> (cim_get_pedal 1) 30) (analysis t note))
                           (if (not (null? note))
                             (velocity_analysis t (dtoi64 ( 2.0 CIMSRd)) note)))
-                         (else (println "Error: record_note function returned -1")))
+                         (else (println "Discarding orphaned NOTE_OFF")))
                        ))))
             (if (= type MIDI_CC)
                 (cond
@@ -3182,12 +3193,21 @@
                        ;;       ;;(println "record midi-cc:" a b)
                        ;;       (record_note t type (i32toi8 chan) (i32toi8 a) (i32toi8 b))
                        ;;       void)
-                       ;;     void))
+                  ;;     void))
                   (pm_send midi_out type chan a b)
                   void)
                  ((= a 66:i32) ;; middle piano pedal
-                  (pm_send midi_out type chan a b)
-                  void)
+                  (if ignore_mode_on
+                      (if (<= b 64)
+                          (begin
+                            (set! ignore_mode_on #f)
+                            (println "Ignore Mode Off")
+                            void))
+                      (if (> b 64)
+                          (begin
+                            (set! ignore_mode_on #t)
+                            (println "Ignore Mode On")
+                            void))))
                  ((= a 67) ;; left piano pedal
                   ;(println "Left Pedal: " b)
                   (cond

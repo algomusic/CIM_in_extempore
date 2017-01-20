@@ -176,7 +176,7 @@
     (dotimes (i 127)
       (pm_send *midi-out* 128 0 i 0))))
 
-;;(panic)
+(panic)
 
 ;;(pm_send *midi-out* 144 0 61 100)
 ;;(pm_send *midi-out* 128 0 61 0)
@@ -547,7 +547,7 @@
                 ;;(hplay (+ 0.0 last-onset (if (< os .11) os (- os mm2))) ;; quantise
                 (hplay (+ offset last-onset os)  inst ;; no quantise
                        (pc:quantize (max 21 (min 110 (real->integer (+ (- key ckey) (list-ref pitch-list i))))) scale)
-                       (clamp (+ (random -10 20) (/ (+ (current_avg_velocity) (cim_chunk_note_volume chunk i)) 2)) 10 127)
+                       (clamp (+ (random 0 10) (/ (+ (current_avg_velocity) (cim_chunk_note_volume chunk i)) 2)) 10 127)
                        (cim_chunk_note_duration chunk i))
                 )))))))
                     
@@ -696,19 +696,23 @@
 ;;(define CIM-playback-frequency 0)
 
 
+(note_buffer_length)
+
 (define density-loop
   (lambda (beat dur)
     (let ((den (current_density))
           (cimDen (get-CIM-density)))
-      (if (< den 0.5)
-          (if (< (random) 0.1)
-              (set-repeat-period (max 1 (- (get-repeat-period) 1)))
-              (set-repeat-period (min 16 (max 1 (+ (get-repeat-period) (random -2 3))))))
-          (if (< (random) 0.25)
-              (set-repeat-period (min 16 (+ (get-repeat-period) 1)))
-              (set-repeat-period (max 1 (min 16 (+ (get-repeat-period) (random -2 3)))))))
-          (println 'density 'CIM (get-CIM-density) 'Hum den 'rate (get-repeat-period))
-          (callback (*metro* (+ beat (* 0.95 dur))) 'density-loop (+ beat dur) dur))))
+      (cond
+       ((< 0 (note_buffer_length)) 
+        (if (< den 0.5)
+            (if (< (random) 0.1)
+                (set-repeat-period (max 1 (- (get-repeat-period) 1)))
+                (set-repeat-period (min 16 (max 1 (+ (get-repeat-period) (random -2 3))))))
+            (if (< (random) 0.25)
+                (set-repeat-period (min 16 (+ (get-repeat-period) 1)))
+                (set-repeat-period (max 1 (min 16 (+ (get-repeat-period) (random -2 3)))))))))
+      (println 'density 'CIM (get-CIM-density) 'Hum den 'rate (get-repeat-period))
+      (callback (*metro* (+ beat (* 0.95 dur))) 'density-loop (+ beat dur) dur))))
           
 
 
@@ -768,12 +772,12 @@
 
 (set-phrase-inertia-spread 0.5)
 
-(setCIMDefaultGapSize 1.0)
+(setCIMDefaultGapSize 2.0)
 
-(set-tempo 120)
+(set-tempo 110)
 
 
 ;; flush memory
 (reset_buffers)
 
-(set-repeat-period 1)
+(set-repeat-period 2)
