@@ -8,7 +8,8 @@ $run_path = File::Spec->rel2abs($0);
 $run_dir = dirname($run_path);
 chdir($run_dir);
 
-my $exe_path = which 'extempore';
+#my $exe_path = which 'extempore';
+my $exe_path = "/Applications/extempore07/extempore";
 my $exe_dir;
 
 if (defined($exe_path) && (-f $exe_path))

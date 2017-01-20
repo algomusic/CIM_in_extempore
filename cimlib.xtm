@@ -247,7 +247,6 @@
        (rational_approximation
         (* -1.0 x) quantum)
        -1)))))
-             
 
 (bind-func beat:[Rational,LinkTimeline*,double,i64]*
   (lambda (timeline inTime startIndex)
@@ -287,10 +286,6 @@
     (set! cim_global_tempo_map (LinkTimeline (LinkTimelineEntry (Rat 0 1) 0.0 (/ CIM_GLOBAL_BPM 60.0)) 1))
     value))
     
-
-
-
-
 
 ;;;;;;;;;;;;;;;;  Pitch analysis functions such as range avoidance ;;;;;;;;;;;;;;;
 (bind-val pitch_history_len i64 16)
@@ -621,7 +616,7 @@
       1)
      (else -1))
     -1))
-        
+
 
 (bind-func cim_remove_high_closure_candidate:[i64,i64]*
   (lambda (candidate:i64)
@@ -641,7 +636,7 @@
         -1)))))
 
 
-;;;
+;;; start note locate
 (bind-func cim_find_good_start_note:[i64,i64]*
   (lambda (candidate:i64)
     (let ((loop
@@ -749,7 +744,7 @@
     (set! CIMNoteBufferStartTimeD (i64tod CIMNoteBufferStartTimeI))
     (set! cim_global_tempo_map (LinkTimeline (LinkTimelineEntry (Rat 0 1) 0.0 (/ CIM_GLOBAL_BPM 60.0)) 1))
     CIMNoteBufferStartTimeI))
-  
+
 
 ;; Note buffer
 (bind-func cim_save_note_buffer
@@ -1278,7 +1273,7 @@
            (d:i64 (tref r 1))
            (c:double (log2 (i64tod d))))
       (/ 1.0 (+ c 1.0)))))
-           
+
 (bind-func tonal_stability:[double,CIMNote*,CIMKey*]*
   (lambda (x:CIMNote* key:CIMKey*)
     (let* ((root (tref key 0))
@@ -1290,7 +1285,7 @@
               (if (= (% (+ (if majmin 4 3) root) 12) pitch_class) 0.25 ;; 3rd
                   0.0))) ;; else 0.0
       )))
-       
+
 
 ;; Zeroth order closure - longer and more tonally stable = more closed
 ;; NOTE that this function is different to those that follow, in that it matters
@@ -1444,7 +1439,7 @@
              )))
         (update_closures (+ index 1) currentTime))
        (else index)))))
-           
+
 (update_closures 0 (cim_current_time))
 (dump_note_closures)
 (dump_high_closure_candidates)
@@ -1459,11 +1454,11 @@
 ;;       (let ((n (retrieve_note 0)))
 ;;         (if (null? n)
 ;;             (Rational 0 -1)))))))
-            
+
 ;;      ((and (< 0 index) (< index CIMNoteBufferIdx))
 ;;       (let ((pb (onset_in_beats (- index 1)))
 ;;             (pn (retrieve_note (- index 1)))
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;      
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 (bind-func cim_chunk_min_pitch
@@ -1481,7 +1476,7 @@
                (else lower)))))
       (loop startIndex))))
 
-      
+
 (bind-func cim_chunk_max_pitch
   (lambda (chunk:CIMChunk*)
     (let* ((upper:i64 0)
@@ -1496,7 +1491,7 @@
                 (loop (+ index 1)))
                (else upper)))))
       (loop startIndex))))
-      
+
 
 (bind-func new_find_chunk:[CIMChunk*,double,i64,i64,i64]*
   (let ((chunk:CIMChunk* (alloc)))
@@ -1552,7 +1547,7 @@
        (else
         (tset! chunk 0 #f)
         chunk)))))
- 
+
 
 
 
@@ -3258,26 +3253,30 @@
 
 
 (bind-func midi_note_on
-  (lambda (timestamp:i32 pitch:i32 volume:i32 chan:i32)
+  ;;(lambda (timestamp:i32 pitch:i32 volume:i32 chan:i32)
+  (lambda (pitch:i32 volume:i32 chan:i32)
     ;;(println "NOTE_ON :" pitch volume chan)
     (midi_msg_buffer_receiver (clock_clock) MIDI_NOTE_ON chan pitch volume)
     void))
 
 (bind-func midi_note_off
-  (lambda (timestamp:i32 pitch:i32 volume:i32 chan:i32)
+  ;(lambda (timestamp:i32 pitch:i32 volume:i32 chan:i32)
+  (lambda (pitch:i32 volume:i32 chan:i32)
     ;; (println "NOTE_OFF:" pitch volume chan)
     (midi_msg_buffer_receiver (clock_clock) MIDI_NOTE_OFF chan pitch 0)
     void))
 
 (bind-func midi_cc
-  (lambda (timestamp:i32 controller:i32 value:i32 chan:i32)
+  ;;(lambda (timestamp:i32 controller:i32 value:i32 chan:i32)
+  (lambda (controller:i32 value:i32 chan:i32)
     ;; (println "MIDI_CC :" controller value chan)
     (midi_msg_buffer_receiver (clock_clock) MIDI_CC chan controller value)
     void))
 
 ;; by default don't print non note/cc MIDI messages
 (bind-func midi_msg
-  (lambda (timestamp:i32 type:i32 a:i32 b:i32 chan:i32)
+  ;(lambda (timestamp:i32 type:i32 a:i32 b:i32 chan:i32)
+  (lambda (type:i32 a:i32 b:i32 chan:i32)
     ;; (println "MIDIMSG: " type a b chan)
     void))
 
