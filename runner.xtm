@@ -133,8 +133,8 @@
 
 ;;(sys:load "../CIM_in_extempore/cimlib.xtm")
 ;(sys:load "/Users/andrew/Documents/code/CIM_in_extempore/cimlib.xtm")
-(sys:load "/Users/s978684/CIM_in_extempore/cimlib.xtm")
-;(sys:load "/Users/s2805534/Documents/code/extempore/extempore-cim/CIM_in_extempore/cimlib.xtm")
+;(sys:load "/Users/s978684/CIM_in_extempore/cimlib.xtm")
+(sys:load "/Users/s2805534/Documents/code/extempore/extempore-cim/CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/core/pc_ivl.xtm")
 (if with-dsp? (sys:load "libs/external/instruments_ext.xtm"))
 
@@ -176,7 +176,7 @@
     (dotimes (i 127)
       (pm_send *midi-out* 128 0 i 0))))
 
-;;(panic)
+(panic)
 
 ($ (pm_send midi_out 144 0 61 100))
 ($ (pm_send midi_out 128 0 61 0))
@@ -370,11 +370,11 @@
 
 (define transform-pitches
   (lambda (lst chnkKey)
-    (println 'transforming-pitches lst)
+    ;(println 'transforming-pitches lst)
     (if (and (not (null? lst))
               (cl:find-if (lambda (x) (>= x 0)) lst))
       (let ((choice (random 0 4)))
-        ;;(print lst 'transform: (now) choice '->)
+        ;(print lst 'transform: (now) choice '->)
         (case choice
           ((0) (set! pitch-list lst)) ;; no change
           ((1) (let ((p1 (car (cl:remove-if (lambda (x) (< x 0)) lst)))) ;; invert
@@ -530,7 +530,7 @@
             (io:osc:send (+ 5000 (*metro* beat)) addy1 "/CIMdisplay/tempoPBS" 0)))
       (transform-pitches (get-pitches-from-chunk chunk) chunkkey)
       (let ((offset (cim_chunk_start_beatclass chunk)))
-        (println 'Offset offset)
+        ;(println 'Offset offset)
         (if (= (cim_chunk_valid chunk) 1)
             (dotimes (i size)
               (if note-not-played? (set! last-onset (* -1 (cim_chunk_note_onset chunk i))))
@@ -547,8 +547,8 @@
                 (inc-CIM-density)
                 ;;(hplay (+ 0.0 last-onset (if (< os .11) os (- os mm2))) ;; quantise
                 (hplay (+ offset last-onset os)  inst ;; no quantise
-                       (pc:quantize (real->integer (+ (- key ckey) (list-ref pitch-list i))) scale)
-                       (clamp (+ (random -10 10) (/ (+ (current_avg_velocity) (cim_chunk_note_volume chunk i)) 2)) 10 127)
+                       (pc:quantize (max 21 (min 110 (real->integer (+ (- key ckey) (list-ref pitch-list i))))) scale)
+                       (clamp (+ (random 0 10) (/ (+ (current_avg_velocity) (cim_chunk_note_volume chunk i)) 2)) 10 127)
                        (cim_chunk_note_duration chunk i))
                 )))))))
                    
@@ -634,7 +634,7 @@
                     (* *cim-phrase-overlap-factor* (get-repeat-period))
                     (get-forbidden-range-min)
                     (get-forbidden-range-max))))
-              ;;(println "Forbidden range is " (get-forbidden-range-min) " to " (get-forbidden-range-max))
+              ;(println "Forbidden range is " (get-forbidden-range-min) " to " (get-forbidden-range-max))
               (set-forbidden-range-min 0)
               (set-forbidden-range-max 0)
               (if (= (cim_chunk_valid chunk) 1)
@@ -697,23 +697,25 @@
 ;;(define CIM-playback-frequency 0)
 
 
+(note_buffer_length)
+
 (define density-loop
   (lambda (beat dur)
     (let ((den (current_density))
           (cimDen (get-CIM-density)))
-      (if (< den 0.5)
-          (if (< (random) 0.1)
-              (set-repeat-period (max 1 (- (get-repeat-period) 1)))
-              (set-repeat-period (min 16 (max 1 (+ (get-repeat-period) (random -2 3))))))
-          (if (< (random) 0.25)
-              (set-repeat-period (min 16 (+ (get-repeat-period) 1)))
-              (set-repeat-period (max 1 (min 16 (+ (get-repeat-period) (random -2 3)))))))
-          (println 'density 'CIM (get-CIM-density) 'Hum den 'rate (get-repeat-period))
-          (callback (*metro* (+ beat (* 0.95 dur))) 'density-loop (+ beat dur) dur))))
-
-
-(set-repeat-period 1)
-
+<<<<<<< HEAD
+      (cond
+       ((< 0 (note_buffer_length)) 
+        (if (< den 0.5)
+            (if (< (random) 0.1)
+                (set-repeat-period (max 1 (- (get-repeat-period) 1)))
+                (set-repeat-period (min 16 (max 1 (+ (get-repeat-period) (random -2 3))))))
+            (if (< (random) 0.25)
+                (set-repeat-period (min 16 (+ (get-repeat-period) 1)))
+                (set-repeat-period (max 1 (min 16 (+ (get-repeat-period) (random -2 3)))))))))
+      (println 'density 'CIM (get-CIM-density) 'Hum den 'rate (get-repeat-period))
+      (callback (*metro* (+ beat (* 0.95 dur))) 'density-loop (+ beat dur) dur))))
+         
 
 
 ;; (define density-loop
@@ -769,10 +771,11 @@
 
 (set-phrase-inertia-spread 0.5)
 
-(setCIMDefaultGapSize 1.0)
+(setCIMDefaultGapSize 2.0)
 
-(set-tempo 120)
+(set-tempo 110)
 
 
 ;; flush memory
 (reset_buffers)
+(set-repeat-period 2)
