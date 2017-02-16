@@ -98,12 +98,13 @@
       1))
 
 
+; hard coded zero?
 (define midi-in-port-id
   (if (cmd-arg-true "midi-in")
       (let* ((value (sys:cmdarg "midi-in"))
              (id (midi_input_port_id value)))
         (if (<= 0 id) id (string->number value)))
-      1))
+      0))
 
 
 (define (print-midi-setup)
@@ -133,8 +134,8 @@
 
 ;;(sys:load "../CIM_in_extempore/cimlib.xtm")
 ;(sys:load "/Users/andrew/Documents/code/CIM_in_extempore/cimlib.xtm")
-;(sys:load "/Users/s978684/CIM_in_extempore/cimlib.xtm")
-(sys:load "/Users/s2805534/Documents/code/extempore/extempore-cim/CIM_in_extempore/cimlib.xtm")
+(sys:load "/Users/s978684/CIM_in_extempore/cimlib.xtm")
+;(sys:load "/Users/s2805534/Documents/code/extempore/extempore-cim/CIM_in_extempore/cimlib.xtm")
 (sys:load "libs/core/pc_ivl.xtm")
 (if with-dsp? (sys:load "libs/external/instruments_ext.xtm"))
 
@@ -551,7 +552,7 @@
                        (clamp (+ (random 0 10) (/ (+ (current_avg_velocity) (cim_chunk_note_volume chunk i)) 2)) 10 127)
                        (cim_chunk_note_duration chunk i))
                 )))))))
-                   
+
 
 (define update-metro
   (lambda (bpm time beats)
@@ -703,9 +704,8 @@
   (lambda (beat dur)
     (let ((den (current_density))
           (cimDen (get-CIM-density)))
-<<<<<<< HEAD
       (cond
-       ((< 0 (note_buffer_length)) 
+       ((< 0 (note_buffer_length))
         (if (< den 0.5)
             (if (< (random) 0.1)
                 (set-repeat-period (max 1 (- (get-repeat-period) 1)))
@@ -715,7 +715,7 @@
                 (set-repeat-period (max 1 (min 16 (+ (get-repeat-period) (random -2 3)))))))))
       (println 'density 'CIM (get-CIM-density) 'Hum den 'rate (get-repeat-period))
       (callback (*metro* (+ beat (* 0.95 dur))) 'density-loop (+ beat dur) dur))))
-         
+
 
 
 ;; (define density-loop

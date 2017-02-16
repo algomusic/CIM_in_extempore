@@ -285,7 +285,7 @@
     (set! CIM_GLOBAL_BPM value)
     (set! cim_global_tempo_map (LinkTimeline (LinkTimelineEntry (Rat 0 1) 0.0 (/ CIM_GLOBAL_BPM 60.0)) 1))
     value))
-    
+
 
 ;;;;;;;;;;;;;;;;  Pitch analysis functions such as range avoidance ;;;;;;;;;;;;;;;
 (bind-val pitch_history_len i64 16)
@@ -658,7 +658,7 @@
       1)
      (else -1))
     -1))
-        
+
 
 (bind-func cim_remove_good_start_note:[i64,i64]*
   (lambda (candidate:i64)
@@ -701,7 +701,7 @@
       1)
      (else -1))
     -1))
-        
+
 
 (bind-func cim_remove_good_end_note:[i64,i64]*
   (lambda (candidate:i64)
@@ -1159,8 +1159,8 @@
     (let* ((note:CIMNote* (cim_chunk_start chunk))
            (onset:double (cim_note_onset note)))
       (modulo onset 1.0))))
-           
-          
+
+
 
 
 (bind-func print:[void,CIMChunk*]*
@@ -3217,6 +3217,7 @@
                       (note_buffer_reset)
                       (println "Flushing!")
                       (set! flush_pedal_down #t)
+                      (set-repeat-period 2)
                       void)
                      (else
                       (set! flush_pedal_down #f)
